@@ -120,6 +120,19 @@ class TestWebTugas(unittest.TestCase):
             time.sleep(0.02)
         self.assertEqual((st["status"], st["kode"]), ("dihentikan", 130))
 
+    def test_id_satker_opsional_divalidasi_dan_diteruskan(self):
+        for bad in ({"id_satker": "abc"}, {"id_satker": 0}, {"id_satker": -5}, {"id_satker": 10**10}):
+            self.assertEqual(self.mulai(**bad)[0], 400, bad)
+        self.assertEqual(self.panggilan, [])
+        s, j = self.mulai(id_satker="69427", tahun=2021)                 # teks angka dari kolom input diterima
+        self.assertEqual(s, 200)
+        for _ in range(100):
+            if self.panggilan:
+                break
+            time.sleep(0.02)
+        self.assertEqual(self.panggilan[0][1], 2021)
+        self.assertEqual(self.mulai(id_satker="")[0], 409)               # kosong = otomatis (valid), tapi tugas sebelumnya masih jalan
+
     def test_peringatan_laju_tinggi_dikirim_ke_ui(self):
         s, j = self.mulai(koneksi=10, jeda=0.2)
         self.assertIn("TINGGI", j["peringatan"])

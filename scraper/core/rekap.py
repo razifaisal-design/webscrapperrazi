@@ -148,7 +148,8 @@ def lengkap(conn, target):
         "SELECT e.jenis_event, COUNT(*) FROM paket_events e JOIN sirup_paket p ON p.kode_rup=e.kunci "
         "WHERE p.id_satker=? AND p.tahun=? GROUP BY e.jenis_event", (target["id_satker"], target["tahun"])).fetchall())
     data["perubahan"] = {"revisi": ev.get("REVISI_RUP", 0), "total": sum(ev.values()), "per_jenis": ev}
+    ids = target.get("id_satker_semua") or [target["id_satker"]]
     data["tahun_tersedia"] = sorted({r[0] for r in conn.execute(
-        "SELECT DISTINCT tahun FROM sirup_paket WHERE id_satker=?", (target["id_satker"],))} | {target["tahun"]})
+        f"SELECT DISTINCT tahun FROM sirup_paket WHERE id_satker IN ({','.join('?' * len(ids))})", ids)} | {target["tahun"]})
     data["versi"] = f"{v[0]}|{v[1]}|{data['paket_dengan_detail']}|{data['detail_terakhir_diambil']}"
     return data

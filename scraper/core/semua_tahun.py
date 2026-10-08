@@ -1,15 +1,15 @@
 """Mode 'Semua tahun' untuk dashboard: tiap tahun dihitung sendiri dengan aturannya (pemetaan MAK bisa beda per tahun),
 lalu digabung. Kode RUP unik lintas tahun, jadi paket tidak pernah bentrok."""
-from . import kegiatan, lokasi, rekap
+from . import db, kegiatan, lokasi, rekap
 from .periksa import BELUM_DIPETAKAN, JALAN, SALURAN
 
 
 def hitung_per_tahun(conn, ambil_target, id_satker):
-    """[(target, data)] untuk setiap tahun yang ada di database (urut tahun)."""
-    tahun = [r[0] for r in conn.execute("SELECT DISTINCT tahun FROM sirup_paket WHERE id_satker=? ORDER BY tahun", (id_satker,))]
+    """[(target, data)] untuk setiap tahun yang ada di database (urut tahun). `id_satker` = satu id atau daftar id yang
+    dikenal; tiap tahun memakai idSatker yang benar-benar punya data pada tahun itu."""
     hasil = []
-    for th in tahun:
-        t = ambil_target(th)
+    for th, sat in db.id_satker_per_tahun(conn, id_satker).items():
+        t = dict(ambil_target(th), id_satker=sat)
         hasil.append((t, rekap.lengkap(conn, t)))
     return hasil
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import tugas as _tugas
-from .cli import TARGETS, muat_target
+from .konfig import TARGETS, muat_target
 from .core import database, db, excel, lokasi, rekap, semua_tahun, statistik
 from .core.klasifikasi import AturanError
 
@@ -77,12 +77,15 @@ class PengelolaTugas:
             self._s.update(tahap_ke=ke, tahap_total=total, tahap_nama=nama, selesai=0, total=0, ok=0, gagal=0,
                            laju=None, sisa_detik=None)
 
-    def mulai(self, jenis, tahun, koneksi, jeda, usia_hari=7, semua=False):
+    def mulai(self, jenis, tahun, koneksi, jeda, usia_hari=7, semua=False, id_satker=None):
         if jenis not in ("semua", "daftar", "detail"):
             raise ValueError("jenis harus 'semua', 'daftar' atau 'detail'")
         koneksi, jeda, usia_hari, tahun = int(koneksi), float(jeda), int(usia_hari), int(tahun)
         if not 2000 <= tahun <= 2100 or not 0 <= usia_hari <= 3650:
             raise ValueError("tahun atau batas umur di luar jangkauan")
+        id_satker = int(id_satker) if id_satker not in (None, "") else None
+        if id_satker is not None and not 1 <= id_satker <= 10**9:
+            raise ValueError("idSatker di luar jangkauan")
         _tugas.cek_param(1 if jenis == "daftar" else koneksi, jeda)
         with self._kunci:
             if self._s["status"] == "berjalan":
@@ -95,14 +98,14 @@ class PengelolaTugas:
                            tahap_ke=0, tahap_total=0, tahap_nama=None,
                            jeda=jeda, mulai=time.strftime("%Y-%m-%dT%H:%M:%S"), selesai=0, total=0, ok=0, gagal=0,
                            log=[], kode=None, peringatan=_tugas.peringatan_laju(1 if jenis == "daftar" else koneksi, jeda))
-        self._thread = threading.Thread(target=self._jalan, args=(jenis, tahun, koneksi, jeda, usia_hari, semua), daemon=True)
+        self._thread = threading.Thread(target=self._jalan, args=(jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker), daemon=True)
         self._thread.start()
 
-    def _jalan(self, jenis, tahun, koneksi, jeda, usia_hari, semua):
+    def _jalan(self, jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker=None):
         kode = 1
         conn = None
         try:
-            _, target = muat_target(None, tahun)
+            _, target = muat_target(None, tahun, id_satker)
             conn = db.buka(self.db_path)
             if jenis == "semua":
                 kode = _tugas.run_semua(conn, target, koneksi=koneksi, jeda=jeda, usia_hari=usia_hari, semua=semua,
@@ -145,7 +148,7 @@ def parse_tahun(q, tahun_default):
 def semua_dari_db(conn, tahun_default):
     """[(target, data)] untuk setiap tahun di database; tiap tahun memakai aturannya sendiri (config per_tahun)."""
     _, dasar = muat_target(None, tahun_default)
-    return semua_tahun.hitung_per_tahun(conn, lambda y: muat_target(None, y)[1], dasar["id_satker"])
+    return semua_tahun.hitung_per_tahun(conn, lambda y: muat_target(None, y)[1], dasar["id_satker_semua"])
 
 
 def versi_db(conn, tahun_default):
@@ -201,7 +204,7 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             if u.path == "/api/tugas/mulai":
                 try:
                     tugas.mulai(body.get("jenis"), body.get("tahun"), body.get("koneksi", 1), body.get("jeda", 1.5),
-                                body.get("usia_hari", 7), bool(body.get("semua")))
+                                body.get("usia_hari", 7), bool(body.get("semua")), body.get("id_satker"))
                 except RuntimeError as e:
                     return self._json(409, {"error": str(e)})
                 except (ValueError, TypeError) as e:
@@ -289,7 +292,7 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             if u.path == "/api/statistik":
                 def hitung(conn):
                     _, dasar = muat_target(None, tahun_default)
-                    data = statistik.statistik_semua(conn, lambda y: muat_target(None, y)[1], dasar["id_satker"])
+                    data = statistik.statistik_semua(conn, lambda y: muat_target(None, y)[1], dasar["id_satker_semua"])
                     data["target"] = {"satker_nama": dasar["satker_nama"], "klpd_nama": dasar["klpd_nama"]}
                     return 200, data
                 return self._api(kunci, hitung)

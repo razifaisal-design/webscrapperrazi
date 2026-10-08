@@ -10,27 +10,11 @@ from . import tugas
 from .core.http import DiblokirError, SopanClient
 from .sources import sirup, sirup_detail
 
-ROOT = Path(__file__).resolve().parents[1]
-TARGETS = ROOT / "config" / "targets.json"
-
-
-def muat_target(nama, tahun=None):
-    """Target dari config. `tahun` menimpa tahun di config; bagian "per_tahun" di config (mis. pemetaan MAK
-    yang berbeda tiap tahun) ikut menimpa untuk tahun itu."""
-    cfg = json.loads(TARGETS.read_text(encoding="utf-8"))
-    nama = nama or cfg["default"]
-    if nama not in cfg["targets"]:
-        raise SystemExit(f"Target '{nama}' tidak ada di {TARGETS}. Pilihan: {', '.join(cfg['targets'])}")
-    t = dict(cfg["targets"][nama])
-    per_tahun = t.pop("per_tahun", {})
-    if tahun:
-        t["tahun"] = int(tahun)
-        t.update(per_tahun.get(str(tahun), {}))
-    return nama, t
+from .konfig import ROOT, TARGETS, muat_target  # noqa: F401  (diekspor ulang untuk kompatibilitas)
 
 
 def cmd_run(args):
-    nama, target = muat_target(args.target, args.tahun)
+    nama, target = muat_target(args.target, args.tahun, getattr(args, "id_satker", None))
     conn = db.buka(args.db)
     try:
         return tugas.run_daftar(conn, target, jeda=args.jeda, force=args.force, ekspor=not args.no_csv)
@@ -40,7 +24,7 @@ def cmd_run(args):
 
 
 def cmd_detail(args):
-    nama, target = muat_target(args.target, args.tahun)
+    nama, target = muat_target(args.target, args.tahun, getattr(args, "id_satker", None))
     conn = db.buka(args.db)
     try:
         return tugas.run_detail(conn, target, koneksi=args.koneksi, jeda=args.jeda, usia_hari=args.usia_hari,
@@ -50,7 +34,7 @@ def cmd_detail(args):
 
 
 def cmd_ambil(args):
-    nama, target = muat_target(args.target, args.tahun)
+    nama, target = muat_target(args.target, args.tahun, getattr(args, 'id_satker', None))
     conn = db.buka(args.db)
     try:
         return tugas.run_semua(conn, target, koneksi=args.koneksi, jeda=args.jeda, usia_hari=args.usia_hari,
@@ -60,7 +44,7 @@ def cmd_ambil(args):
 
 
 def cmd_lokasi(args):
-    nama, target = muat_target(args.target, args.tahun)
+    nama, target = muat_target(args.target, args.tahun, getattr(args, 'id_satker', None))
     tugas.bangun_lokasi(db.buka(args.db), target, args.db)
     return 0
 
@@ -68,7 +52,7 @@ def cmd_lokasi(args):
 def cmd_periksa(args):
     import csv
     from .core import rekap
-    nama, target = muat_target(args.target, args.tahun)
+    nama, target = muat_target(args.target, args.tahun, getattr(args, 'id_satker', None))
     conn = db.buka(args.db)
     data = rekap.lengkap(conn, target)
     pr = data["periksa"]
@@ -102,7 +86,7 @@ def cmd_web(args):
 
 
 def cmd_events(args):
-    _, target = muat_target(args.target, args.tahun)
+    _, target = muat_target(args.target, args.tahun, getattr(args, 'id_satker', None))
     conn = db.buka(args.db)
     rows = conn.execute(
         "SELECT e.waktu,e.jenis_event,e.kunci,e.nama_paket,e.field,e.nilai_lama,e.nilai_baru,e.selisih "
@@ -124,6 +108,7 @@ def main(argv=None):
     r.add_argument("sumber", choices=["sirup"])
     r.add_argument("--target", help="nama target di config/targets.json")
     r.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
+    r.add_argument("--id-satker", type=int, help="idSatker SiRUP untuk tahun ini (default: dari config / dicari otomatis)")
     r.add_argument("--jeda", type=float, default=1.5, help="jeda antar request (detik)")
     r.add_argument("--force", action="store_true", help="terima penurunan jumlah > 20%%")
     r.add_argument("--no-csv", action="store_true")
@@ -132,6 +117,7 @@ def main(argv=None):
     a.add_argument("sumber", choices=["sirup"])
     a.add_argument("--target")
     a.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
+    a.add_argument("--id-satker", type=int, help="idSatker SiRUP untuk tahun ini (default: dari config / dicari otomatis)")
     a.add_argument("--koneksi", type=int, default=1, help="jumlah koneksi paralel untuk detail (1-10; default 1)")
     a.add_argument("--jeda", type=float, default=1.5, help="jeda tiap koneksi antar permintaan, detik (default 1.5)")
     a.add_argument("--usia-hari", type=int, default=7, help="ambil ulang detail yang lebih tua dari N hari (0 = nonaktif)")
@@ -143,6 +129,7 @@ def main(argv=None):
     d.add_argument("sumber", choices=["sirup"])
     d.add_argument("--target")
     d.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
+    d.add_argument("--id-satker", type=int, help="idSatker SiRUP untuk tahun ini (default: dari config)")
     d.add_argument("--koneksi", type=int, default=1, help="jumlah koneksi paralel (1-10; default 1)")
     d.add_argument("--jeda", type=float, default=1.5, help="jeda tiap koneksi antar permintaan, detik (default 1.5)")
     d.add_argument("--limit", type=int, help="ambil hanya N paket (untuk uji coba)")

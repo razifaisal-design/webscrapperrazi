@@ -62,6 +62,11 @@ def _params(target, mulai, jumlah):
     }
 
 
+def total_paket(client, jenis, target):
+    """Jumlah paket menurut situs (1 permintaan kecil) - dipakai untuk menguji apakah idSatker benar untuk tahun itu."""
+    return int(client.get_json(ENDPOINT[jenis], _params(target, 0, 1))["iTotalDisplayRecords"])
+
+
 def ambil_semua(client, jenis, target, log=print):
     """Ambil semua halaman. Mengembalikan (daftar_paket, total_dilaporkan_situs)."""
     url = ENDPOINT[jenis]

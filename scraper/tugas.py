@@ -8,6 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from . import konfig
 from .core import database, db, rekap
 from .core.http import DiblokirError, SopanClient
 from .sources import sirup, sirup_detail
@@ -74,10 +75,71 @@ def ok_ada_detail(conn, target):
         "WHERE p.id_satker=? AND p.tahun=? AND d.error IS NULL LIMIT 1", (target["id_satker"], target["tahun"])).fetchone() is not None
 
 
+# ======================= idSatker per tahun =======================
+def tentukan_id_satker(conn, target, client, log=print):
+    """Cari idSatker yang benar untuk tahun ini. SiRUP bisa memakai idSatker BERBEDA tiap tahun (mis. 2021 = 69427,
+    2022+ = 173394); idSatker yang salah mengembalikan 0 paket tanpa error.
+    Bila sudah ada data untuk id itu pada tahun itu: dipercaya. Bila belum: diuji id dari config lalu id lain yang dikenal.
+    -> (idSatker | None, diganti)"""
+    asal = int(target["id_satker"])
+    if conn.execute("SELECT 1 FROM sirup_paket WHERE id_satker=? AND tahun=? LIMIT 1", (asal, target["tahun"])).fetchone():
+        return asal, False
+    urutan = [asal] + [i for i in target.get("id_satker_semua", []) if i != asal]
+    for cid in urutan:
+        total = sum(sirup.total_paket(client, jenis, dict(target, id_satker=cid)) for jenis in ("penyedia", "swakelola"))
+        if total > 0:
+            if cid != asal:
+                log(f"idSatker {asal} tidak punya paket untuk tahun {target['tahun']}, tetapi idSatker {cid} punya {total} paket -> memakai {cid}.")
+            return cid, cid != asal
+        log(f"idSatker {cid}: 0 paket untuk tahun {target['tahun']}.")
+    return None, False
+
+
+def _pesan_id_tidak_ketemu(target):
+    ids = ", ".join(str(i) for i in [target["id_satker"]] + [x for x in target.get("id_satker_semua", []) if x != target["id_satker"]])
+    return (f"Tidak ada paket untuk tahun {target['tahun']} pada idSatker {ids}. Tahun ini kemungkinan memakai idSatker lain: "
+            f"cari di alamat SiRUP (sirup.inaproc.id/sirup/home/penyediaSatker?idSatker=NNNN) lalu isi kolom 'ID satker' "
+            f"(dashboard) atau opsi --id-satker.")
+
+
+def _selesaikan_target(conn, target, jeda, buat_klien, log):
+    """-> (target dengan idSatker yang benar | None, kode_keluar)."""
+    client = buat_klien(jeda=jeda)
+    try:
+        sat, _ = tentukan_id_satker(conn, target, client, log)
+    except DiblokirError as e:
+        log(f"[BERHENTI] {e}")
+        return None, 2
+    finally:
+        client.close()
+    if sat is None:
+        pesan = _pesan_id_tidak_ketemu(target)
+        run_id = db.mulai_run(conn, target["id_satker"], target["tahun"])
+        db.tutup_run(conn, run_id, "invalid", 0, 0, pesan)
+        log("[TIDAK ADA DATA] " + pesan)
+        return None, 3
+    return dict(target, id_satker=sat), 0
+
+
+def _catat_id_satker(target, log):
+    """Setelah pengambilan BERHASIL: simpan idSatker tahun ini ke config bila berbeda dari bawaan."""
+    try:
+        if konfig.simpan_id_satker(target["tahun"], target["id_satker"]):
+            log(f"Config diperbarui: tahun {target['tahun']} memakai idSatker {target['id_satker']} (config/targets.json).")
+    except Exception as e:                                  # catatan config tidak boleh menggagalkan pengambilan data
+        log(f"(idSatker belum tercatat di config: {e!r})")
+
+
 # ======================= daftar RUP =======================
-def run_daftar(conn, target, jeda=1.5, force=False, ekspor=True, log=print, buat_klien=SopanClient, berhenti=None):
-    """Ambil seluruh daftar RUP satu satker+tahun. Return kode: 0 ok, 1 gagal, 2 diblokir, 3 tidak valid, 130 dihentikan."""
+def run_daftar(conn, target, jeda=1.5, force=False, ekspor=True, log=print, buat_klien=SopanClient, berhenti=None,
+               resolusi=True):
+    """Ambil seluruh daftar RUP satu satker+tahun. Return kode: 0 ok, 1 gagal, 2 diblokir, 3 tidak valid/tidak ada data,
+    130 dihentikan. `resolusi`: tentukan dulu idSatker yang benar untuk tahun itu (lihat tentukan_id_satker)."""
     cek_param(1, jeda)
+    if resolusi:
+        target, kode = _selesaikan_target(conn, target, jeda, buat_klien, log)
+        if target is None:
+            return kode
     run_id = db.mulai_run(conn, target["id_satker"], target["tahun"])
     log(f"Run #{run_id} - {target['satker_nama']} ({target['klpd_nama']}) tahun {target['tahun']}")
     client = buat_klien(jeda=jeda)
@@ -111,6 +173,7 @@ def run_daftar(conn, target, jeda=1.5, force=False, ekspor=True, log=print, buat
 
     r = db.finalisasi(conn, run_id, paket, target["id_satker"], target["tahun"])
     db.tutup_run(conn, run_id, "success", len(paket), sum(totals.values()))
+    _catat_id_satker(target, log)
     total_pagu = sum(p["pagu"] for p in paket)
     log(f"Selesai. {len(paket)} paket ({totals['penyedia']} penyedia + {totals['swakelola']} swakelola), "
         f"total pagu Rp {total_pagu:,.0f}".replace(",", "."))
@@ -247,10 +310,14 @@ def run_semua(conn, target, koneksi=1, jeda=1.5, usia_hari=7, semua=False, limit
     supaya detail tidak diambil dari daftar yang basi atau tidak valid."""
     cek_param(koneksi, jeda)
     berhenti = berhenti or threading.Event()
+    target, kode = _selesaikan_target(conn, target, jeda, buat_klien, log)     # idSatker yang benar utk tahun ini, dipakai kedua tahap
+    if target is None:
+        return kode
     if tahap:
         tahap(1, 2, "Daftar RUP")
     log("=== TAHAP 1/2: daftar RUP ===")
-    kode = run_daftar(conn, target, jeda=jeda, force=force, ekspor=False, log=log, buat_klien=buat_klien, berhenti=berhenti)
+    kode = run_daftar(conn, target, jeda=jeda, force=force, ekspor=False, log=log, buat_klien=buat_klien, berhenti=berhenti,
+                      resolusi=False)
     if kode != 0:
         log(f"Tahap 2 (detail) TIDAK dijalankan karena tahap 1 tidak berhasil (kode {kode}).")
         return kode

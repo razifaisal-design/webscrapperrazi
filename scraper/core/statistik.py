@@ -5,7 +5,7 @@ bisa digrafikkan - hanya kurang akurat; hal itu ditandai lewat `lengkap` di tahu
 import html
 from collections import Counter, defaultdict
 
-from . import lokasi
+from . import db, lokasi
 from .klasifikasi import LAINNYA, Pengklasifikasi
 from .rekap import norm_uraian
 
@@ -60,10 +60,11 @@ def statistik_tahun(conn, target):
 
 def statistik_semua(conn, ambil_target, id_satker, top=10):
     """ambil_target(tahun) -> target config. Mengembalikan data untuk /api/statistik."""
-    tahun = [r[0] for r in conn.execute("SELECT DISTINCT tahun FROM sirup_paket WHERE id_satker=? ORDER BY tahun", (id_satker,))]
+    pilih = db.id_satker_per_tahun(conn, id_satker)             # idSatker bisa berbeda tiap tahun
+    tahun = list(pilih)
     per, lok = {}, {}
     for th in tahun:
-        per[str(th)], lok[th] = statistik_tahun(conn, ambil_target(th))
+        per[str(th)], lok[th] = statistik_tahun(conn, dict(ambil_target(th), id_satker=pilih[th]))
     info = [{"tahun": th, "paket": per[str(th)]["paket"], "detail": per[str(th)]["detail"],
              "lengkap": bool(per[str(th)]["paket"]) and per[str(th)]["detail"] >= LENGKAP_MIN * per[str(th)]["paket"]} for th in tahun]
     daftar = sorted(lokasi.gabung_jalan(lok), key=lambda j: -j["total_pagu"])[:top]

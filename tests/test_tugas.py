@@ -164,7 +164,8 @@ class TestRunSemua(unittest.TestCase):
             self.urutan.append(("detail", k["koneksi"], k["jeda"], k["usia_hari"], k["semua"]))
             return 0
 
-        with unittest.mock.patch.object(tugas, "run_daftar", daftar), unittest.mock.patch.object(tugas, "run_detail", detail):
+        with unittest.mock.patch.object(tugas, "run_daftar", daftar), unittest.mock.patch.object(tugas, "run_detail", detail), \
+                unittest.mock.patch.object(tugas, "_selesaikan_target", lambda conn, t, *a, **k: (t, 0)):
             return tugas.run_semua(self.conn, TARGET, log=self.log.append, tahap=lambda *a: self.tahap.append(a),
                                    berhenti=stop, **kw)
 

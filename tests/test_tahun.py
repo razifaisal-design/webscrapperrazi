@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from scraper import cli
+from scraper import cli, konfig
 
 
 class TestMuatTarget(unittest.TestCase):
@@ -16,7 +16,7 @@ class TestMuatTarget(unittest.TestCase):
             "per_tahun": {"2025": {"periksa": {"mak_kategori": [{"awalan": "Y", "kategori": "Jalan"}]}}}}}}
         self.path = Path(self.tmp.name) / "t.json"
         self.path.write_text(json.dumps(cfg))
-        p = mock.patch.object(cli, "TARGETS", self.path)
+        p = mock.patch.object(konfig, "TARGETS", self.path)
         p.start()
         self.addCleanup(p.stop)
 

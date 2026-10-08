@@ -67,6 +67,10 @@ def buka(path=DB_DEFAULT):
     for kol in ("kode_rup_sebelumnya", "kode_rup_pengganti"):     # database lama: tambah kolom
         if kol not in ada:
             conn.execute(f"ALTER TABLE sirup_paket ADD COLUMN {kol} TEXT")
+    # pengambilan lama yang 0 paket tetapi dicatat 'success' (idSatker salah untuk tahun itu) -> tandai tidak valid
+    with conn:
+        conn.execute("UPDATE scrape_runs SET status='invalid', catatan='0 paket ditemukan (kemungkinan idSatker salah untuk tahun ini)' "
+                     "WHERE sumber='SIRUP' AND status='success' AND COALESCE(jumlah_baris,0)=0")
     # sumber dana lama berbentuk 'APBD, APBD, APBD' -> satu nilai (APBD / APBDP)
     with conn:
         for (nilai,) in conn.execute("SELECT DISTINCT sumber_dana FROM sirup_paket WHERE sumber_dana LIKE '%,%'").fetchall():
@@ -78,6 +82,19 @@ def buka(path=DB_DEFAULT):
 
 def _now():
     return datetime.now().isoformat(timespec="seconds")
+
+
+def id_satker_per_tahun(conn, ids):
+    """{tahun: idSatker} menurut DATA yang tersimpan (idSatker dengan paket terbanyak pada tahun itu). SiRUP bisa memakai
+    idSatker berbeda tiap tahun, jadi tahun tidak boleh diasumsikan memakai id bawaan."""
+    ids = [ids] if isinstance(ids, int) else list(ids)
+    hasil, terbanyak = {}, {}
+    marks = ",".join("?" * len(ids))
+    for tahun, sat, n in conn.execute(
+            f"SELECT tahun, id_satker, COUNT(*) FROM sirup_paket WHERE id_satker IN ({marks}) GROUP BY tahun, id_satker", ids):
+        if n > terbanyak.get(tahun, 0):
+            hasil[tahun], terbanyak[tahun] = sat, n
+    return dict(sorted(hasil.items()))
 
 
 def mulai_run(conn, id_satker, tahun, sumber="SIRUP"):

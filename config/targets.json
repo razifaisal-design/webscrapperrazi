@@ -4,6 +4,10 @@
     "perkim-pontianak": {
       "klpd_nama": "Kota Pontianak",
       "id_satker": 173394,
+      "id_satker_per_tahun": {
+        "2020": 69427,
+        "2021": 69427
+      },
       "satker_nama": "DINAS PERUMAHAN RAKYAT DAN KAWASAN PERMUKIMAN",
       "tahun": 2026,
       "mak_segmen": 12,
