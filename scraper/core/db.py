@@ -1,11 +1,10 @@
 """Penyimpanan lokal SQLite + finalisasi run (diff -> event -> upsert -> tandai hilang) dalam satu transaksi."""
-import csv
 import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from .mak import mak_inti, norm_mak
+from .mak import mak_inti
 
 DB_DEFAULT = Path(__file__).resolve().parents[2] / "data" / "pantau.db"
 
@@ -232,34 +231,3 @@ def catat_gagal_detail(conn, kode, pesan):
             "INSERT INTO sirup_detail(kode_rup,diambil_pada,error) VALUES(?,?,?) "
             "ON CONFLICT(kode_rup) DO UPDATE SET error=excluded.error, diambil_pada=excluded.diambil_pada",
             (kode, _now(), pesan[:300]))
-
-
-KOLOM_CSV = ["kode_rup", "jenis", "nama_paket", "penyelenggara", "pagu", "metode_pemilihan", "sumber_dana",
-             "waktu_pemilihan", "jenis_pengadaan", "lokasi", "volume", "uraian", "spesifikasi", "mak",
-             "produk_dalam_negeri", "usaha_kecil", "kontrak_mulai", "kontrak_akhir", "pemilihan_mulai",
-             "tanggal_umumkan", "link", "first_seen", "last_seen"]
-
-
-def ekspor_csv(conn, id_satker, tahun, path, mak_segmen=12):
-    """CSV gabungan daftar + detail (kolom detail kosong bila belum diambil)."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    rows = conn.execute(
-        "SELECT p.*, d.lokasi_ringkas, d.volume, d.uraian, d.spesifikasi, d.mak, d.extra_json "
-        "FROM sirup_paket p LEFT JOIN sirup_detail d ON d.kode_rup=p.kode_rup AND d.error IS NULL "
-        "WHERE p.id_satker=? AND p.tahun=? AND p.is_active=1 ORDER BY p.jenis, p.kode_rup", (id_satker, tahun)).fetchall()
-    with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(KOLOM_CSV)
-        for r in rows:
-            extra = json.loads(r["extra_json"]) if r["extra_json"] else {}
-            if r["jenis"] == "swakelola":
-                extra.setdefault("kontrak_mulai", extra.get("pelaksanaan_mulai"))
-                extra.setdefault("kontrak_akhir", extra.get("pelaksanaan_akhir"))
-            baris = dict(r)
-            baris["lokasi"] = r["lokasi_ringkas"]
-            baris["mak"] = mak_inti(r["mak"], mak_segmen)
-            baris.update({k: extra.get(k) for k in ("jenis_pengadaan", "produk_dalam_negeri", "usaha_kecil",
-                                                    "kontrak_mulai", "kontrak_akhir", "pemilihan_mulai", "tanggal_umumkan")})
-            w.writerow([baris.get(k) for k in KOLOM_CSV])
-    return len(rows)

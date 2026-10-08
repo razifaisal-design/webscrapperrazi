@@ -1,4 +1,4 @@
-"""CLI:  python -m scraper run sirup | detail sirup | periksa | web | events"""
+"""CLI:  python -m scraper run sirup | detail sirup | lokasi | periksa | web | events"""
 import argparse
 import json
 import sys
@@ -13,20 +13,48 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGETS = ROOT / "config" / "targets.json"
 
 
-def muat_target(nama):
+def muat_target(nama, tahun=None):
+    """Target dari config. `tahun` menimpa tahun di config; bagian "per_tahun" di config (mis. pemetaan MAK
+    yang berbeda tiap tahun) ikut menimpa untuk tahun itu."""
     cfg = json.loads(TARGETS.read_text(encoding="utf-8"))
     nama = nama or cfg["default"]
     if nama not in cfg["targets"]:
         raise SystemExit(f"Target '{nama}' tidak ada di {TARGETS}. Pilihan: {', '.join(cfg['targets'])}")
-    return nama, cfg["targets"][nama]
+    t = dict(cfg["targets"][nama])
+    per_tahun = t.pop("per_tahun", {})
+    if tahun:
+        t["tahun"] = int(tahun)
+        t.update(per_tahun.get(str(tahun), {}))
+    return nama, t
 
 
 def csv_path(target):
     return ROOT / "data" / f"sirup_{target['id_satker']}_{target['tahun']}.csv"
 
 
+def ekspor_lengkap(conn, target):
+    """Tulis database lengkap (daftar + detail + jenis kegiatan + MAK perbaikan + jalan/gang) ke CSV."""
+    from .core import database, rekap
+    data = rekap.lengkap(conn, target)
+    n = database.ekspor_csv(database.baris(conn, target, data), csv_path(target))
+    return f"{csv_path(target)} ({n} baris, semua kolom)"
+
+
+def cmd_lokasi(args):
+    from .core import database, rekap
+    nama, target = muat_target(args.target, args.tahun)
+    conn = db.buka(args.db)
+    data = rekap.lengkap(conn, target)
+    nj, ng = database.simpan_lokasi(conn, target, data)
+    print(f"Tabel ref_jalan: {nj} jalan | ref_gang: {ng} gang/komplek | paket_lokasi: {len(data['lokasi']['per_paket'])} paket fisik")
+    if data["lokasi"]["tidak_terbaca"]:
+        print(f"Nama jalan TIDAK terbaca pada {len(data['lokasi']['tidak_terbaca'])} paket: {', '.join(data['lokasi']['tidak_terbaca'][:10])}")
+    print(f"DB  : {args.db}\nCSV : {ekspor_lengkap(conn, target)}")
+    return 0
+
+
 def cmd_run(args):
-    nama, target = muat_target(args.target)
+    nama, target = muat_target(args.target, args.tahun)
     conn = db.buka(args.db)
     run_id = db.mulai_run(conn, target["id_satker"], target["tahun"])
     print(f"Run #{run_id} - {target['satker_nama']} ({target['klpd_nama']}) tahun {target['tahun']}")
@@ -66,14 +94,13 @@ def cmd_run(args):
         print(f"Perubahan: {r['baru']} baru, {r['berubah']} berubah, {r['hilang']} hilang, "
               f"{r['muncul_kembali']} muncul kembali, {r['revisi']} kemungkinan revisi RUP")
     if not args.no_csv:
-        n = db.ekspor_csv(conn, target["id_satker"], target["tahun"], csv_path(target), target.get("mak_segmen", 12))
-        print(f"CSV : {csv_path(target)} ({n} baris, termasuk kolom link)")
+        print(f"CSV : {ekspor_lengkap(conn, target)}")
     print(f"DB  : {Path(args.db)}")
     return 0
 
 
 def cmd_detail(args):
-    nama, target = muat_target(args.target)
+    nama, target = muat_target(args.target, args.tahun)
     conn = db.buka(args.db)
     antre = db.paket_perlu_detail(conn, target["id_satker"], target["tahun"], args.semua)
     if args.limit:
@@ -113,15 +140,14 @@ def cmd_detail(args):
     print(f"\nSelesai. Detail berhasil: {ok}, gagal: {len(gagal)}")
     for k, m in gagal[:10]:
         print(f"  gagal {k}: {m}")
-    n = db.ekspor_csv(conn, target["id_satker"], target["tahun"], csv_path(target), target.get("mak_segmen", 12))
-    print(f"CSV : {csv_path(target)} ({n} baris, sudah berisi lokasi/volume/uraian/spesifikasi)")
+    print(f"CSV : {ekspor_lengkap(conn, target)}")
     return 0 if not gagal else 4
 
 
 def cmd_periksa(args):
     import csv
     from .core import rekap
-    nama, target = muat_target(args.target)
+    nama, target = muat_target(args.target, args.tahun)
     conn = db.buka(args.db)
     data = rekap.lengkap(conn, target)
     pr = data["periksa"]
@@ -150,12 +176,12 @@ def cmd_periksa(args):
 
 def cmd_web(args):
     from . import web
-    web.jalankan(args.db, args.port, not args.no_browser)
+    web.jalankan(args.db, args.port, not args.no_browser, args.tahun)
     return 0
 
 
 def cmd_events(args):
-    _, target = muat_target(args.target)
+    _, target = muat_target(args.target, args.tahun)
     conn = db.buka(args.db)
     rows = conn.execute(
         "SELECT e.waktu,e.jenis_event,e.kunci,e.nama_paket,e.field,e.nilai_lama,e.nilai_baru,e.selisih "
@@ -176,6 +202,7 @@ def main(argv=None):
     r = sub.add_parser("run", help="ambil data dan simpan ke database lokal")
     r.add_argument("sumber", choices=["sirup"])
     r.add_argument("--target", help="nama target di config/targets.json")
+    r.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
     r.add_argument("--jeda", type=float, default=1.5, help="jeda antar request (detik)")
     r.add_argument("--force", action="store_true", help="terima penurunan jumlah > 20%%")
     r.add_argument("--no-csv", action="store_true")
@@ -183,20 +210,28 @@ def main(argv=None):
     d = sub.add_parser("detail", help="ambil detail tiap paket (lokasi, volume, uraian, spesifikasi)")
     d.add_argument("sumber", choices=["sirup"])
     d.add_argument("--target")
+    d.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
     d.add_argument("--jeda", type=float, default=1.5)
     d.add_argument("--limit", type=int, help="ambil hanya N paket (untuk uji coba)")
     d.add_argument("--semua", action="store_true", help="ambil ulang semua, bukan hanya yang belum/berubah")
     d.set_defaults(fn=cmd_detail)
+    lk = sub.add_parser("lokasi", help="bangun database Nama Jalan & Nama Gang (paket fisik) + ekspor CSV lengkap")
+    lk.add_argument("--target")
+    lk.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
+    lk.set_defaults(fn=cmd_lokasi)
     k = sub.add_parser("periksa", help="deteksi kesalahan (mis. Saluran tercatat di MAK Jalan)")
     k.add_argument("--target")
+    k.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
     k.add_argument("--limit", type=int, default=10, help="jumlah kesalahan yang ditampilkan di layar")
     k.set_defaults(fn=cmd_periksa)
     w = sub.add_parser("web", help="buka dashboard lokal di browser")
     w.add_argument("--port", type=int, default=8765)
     w.add_argument("--no-browser", action="store_true")
+    w.add_argument("--tahun", type=int, help="tahun yang tampil pertama kali (default: dari config)")
     w.set_defaults(fn=cmd_web)
     e = sub.add_parser("events", help="tampilkan perubahan terakhir")
     e.add_argument("--target")
+    e.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
     e.add_argument("--limit", type=int, default=30)
     e.set_defaults(fn=cmd_events)
     args = ap.parse_args(argv)

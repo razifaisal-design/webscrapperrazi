@@ -19,6 +19,12 @@ JUDUL = {
     "SATUAN_BERTENTANGAN": "Satuan volume bertentangan",
     "PAGU_TIDAK_SAMA": "Pagu detail ≠ pagu daftar",
     "KEMUNGKINAN_GANDA": "Kemungkinan paket ganda",
+    "KECAMATAN_SALAH_EJA": "Salah eja kecamatan",
+    "KECAMATAN_TIDAK_DIKENAL": "Kecamatan tidak dikenal",
+    "KECAMATAN_TIDAK_ADA": "Kecamatan tidak tertulis",
+    "KELURAHAN_SALAH_EJA": "Salah eja kelurahan",
+    "KELURAHAN_TIDAK_DIKENAL": "Kelurahan tidak dikenal",
+    "KELURAHAN_TIDAK_SESUAI_KECAMATAN": "Kelurahan tidak sesuai kecamatan",
 }
 
 
@@ -96,6 +102,10 @@ def jalankan(data, aturan=None):
             if m and m.group(1).upper() in satuan_salah[kat]:
                 tambah(p, "peringatan", "SATUAN_BERTENTANGAN",
                        f"Paket {kat} tetapi satuan volume \"{m.group(1)}\" (volume: {p['volume']})")
+
+        # 3b. kesalahan input kecamatan / kelurahan (dibandingkan dengan daftar wilayah resmi)
+        for m in p.get("lokasi_masalah", []):
+            tambah(p, m["tingkat"], m["jenis"], m["pesan"])
 
         # 4. pagu detail harus sama dengan pagu di daftar SiRUP
         if abs((p["pagu"] or 0) - (p["pagu_daftar"] or 0)) >= 0.5:

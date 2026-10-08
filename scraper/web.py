@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .cli import muat_target
-from .core import rekap
+from .core import database, rekap
 from .core.klasifikasi import AturanError
 
 HTML = Path(__file__).with_name("dashboard.html")
@@ -20,7 +20,7 @@ def buka_readonly(path):
     return conn
 
 
-def buat_handler(db_path):
+def buat_handler(db_path, tahun_default=None):
     class Handler(BaseHTTPRequestHandler):
         def _kirim(self, kode, tipe, isi):
             self.send_response(kode)
@@ -37,14 +37,33 @@ def buat_handler(db_path):
             u = urlparse(self.path)
             if u.path == "/":
                 return self._kirim(200, "text/html; charset=utf-8", HTML.read_bytes())
+            if u.path == "/api/database":
+                try:
+                    q = parse_qs(u.query)
+                    th = q.get("tahun", [None])[0]
+                    nama, t = muat_target(q.get("target", [None])[0], int(th) if th and th.isdigit() else tahun_default)
+                    conn = buka_readonly(db_path)
+                    try:
+                        data = rekap.lengkap(conn, t)
+                        return self._json(200, {"versi": data["versi"], "kolom": database.KOLOM,
+                                                "baris": database.baris(conn, t, data)})
+                    finally:
+                        conn.close()
+                except sqlite3.Error as e:
+                    return self._json(500, {"error": f"Database belum siap: {e}"})
+                except (AturanError, SystemExit) as e:
+                    return self._json(500, {"error": str(e)})
             if u.path == "/api/rekap":
                 try:
-                    nama, t = muat_target(parse_qs(u.query).get("target", [None])[0])
+                    q = parse_qs(u.query)
+                    th = q.get("tahun", [None])[0]
+                    nama, t = muat_target(q.get("target", [None])[0], int(th) if th and th.isdigit() else tahun_default)
                     conn = buka_readonly(db_path)
                     try:
                         data = rekap.lengkap(conn, t)
                     finally:
                         conn.close()
+                    data["lokasi"].pop("per_paket", None)       # sudah ada di data["paket"]
                     data["target"] = {"nama": nama, **{k: v for k, v in t.items() if k not in ("klasifikasi", "periksa")}}
                     return self._json(200, data)
                 except sqlite3.Error as e:
@@ -61,10 +80,10 @@ def buat_handler(db_path):
     return Handler
 
 
-def jalankan(db_path, port=8765, buka_browser=True):
+def jalankan(db_path, port=8765, buka_browser=True, tahun=None):
     if not Path(db_path).exists():
         raise SystemExit(f"Database {db_path} belum ada. Jalankan dulu: python -m scraper run sirup")
-    srv = ThreadingHTTPServer(("127.0.0.1", port), buat_handler(db_path))
+    srv = ThreadingHTTPServer(("127.0.0.1", port), buat_handler(db_path, tahun))
     url = f"http://127.0.0.1:{port}/"
     print(f"Dashboard: {url}   (Ctrl+C untuk berhenti)")
     if buka_browser:

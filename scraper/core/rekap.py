@@ -101,9 +101,28 @@ def rekap_mak(conn, id_satker, tahun, aturan=None, mak_segmen=SEGMEN_DEFAULT):
 
 
 def lengkap(conn, target):
-    """Rekap + hasil pemeriksaan untuk satu target dari config/targets.json."""
-    from . import periksa
+    """Rekap + jenis kegiatan/MAK perbaikan + nama jalan/gang + pemeriksaan, untuk satu target config."""
+    import html
+    from . import kegiatan, lokasi, periksa
     data = rekap_mak(conn, target["id_satker"], target["tahun"], target.get("klasifikasi"),
                      target.get("mak_segmen", SEGMEN_DEFAULT))
+    for p in data["paket"].values():
+        p["nama_paket"] = html.unescape(p["nama_paket"])   # SiRUP mengirim apostrof sebagai &#x27;
+    kegiatan.tambahkan(data, (target.get("periksa") or {}))
+    wilayah = (target.get("lokasi") or {}).get("wilayah")
+    kec = list(wilayah) if wilayah else (target.get("lokasi") or {}).get("kecamatan") or lokasi._KECAMATAN_DEFAULT
+    fisik = [p for p in data["paket"].values() if p["kategori"] in ("Jalan", "Saluran") and p["jenis_pekerjaan"] == "Fisik"]
+    data["lokasi"] = lokasi.bangun(fisik, kec, wilayah)
+    for kode, h in data["lokasi"]["per_paket"].items():
+        data["paket"][kode].update(jalan=h["jalan"], gang=h["gang"], komplek=h["komplek"],
+                                   kecamatan=h["kecamatan"], kelurahan=h["kelurahan"],
+                                   kecamatan_asli=h["kecamatan_asli"], kelurahan_asli=h["kelurahan_asli"],
+                                   lokasi_masalah=h["masalah"])
     data["periksa"] = periksa.jalankan(data, target.get("periksa"))
+    # penanda 'data berubah' untuk auto-refresh halaman Database
+    v = conn.execute("SELECT MAX(last_seen), COUNT(*) FROM sirup_paket WHERE id_satker=? AND tahun=?",
+                     (target["id_satker"], target["tahun"])).fetchone()
+    data["tahun_tersedia"] = sorted({r[0] for r in conn.execute(
+        "SELECT DISTINCT tahun FROM sirup_paket WHERE id_satker=?", (target["id_satker"],))} | {target["tahun"]})
+    data["versi"] = f"{v[0]}|{v[1]}|{data['paket_dengan_detail']}|{data['detail_terakhir_diambil']}"
     return data

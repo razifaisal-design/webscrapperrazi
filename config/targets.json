@@ -50,15 +50,17 @@
         "konsultan": "(?i)\\b(perencanaan|pengawasan|konsultan|konsultansi)\\b"
       },
       "periksa": {
-        "catatan": "mak_kategori: awalan kode MAK (sampai sub kegiatan) -> kategori yang SEHARUSNYA. Paket yang kategorinya (dari nama/uraian) beda dengan kategori MAK-nya ditandai kesalahan. satuan_salah: satuan volume yang jelas bertentangan dengan kategori.",
+        "catatan": "mak_kategori: awalan kode MAK (sampai sub kegiatan) -> kategori yang SEHARUSNYA. Paket yang kategorinya (dari nama/uraian) beda dengan kategori MAK-nya ditandai kesalahan. satuan_salah: satuan volume yang jelas bertentangan dengan kategori. mak_baku: MAK lengkap (12 segmen) yang dipakai sebagai 'MAK Perbaikan' untuk kategori itu.",
         "mak_kategori": [
           {
             "awalan": "1.04.05.2.01.0012",
-            "kategori": "Jalan"
+            "kategori": "Jalan",
+            "mak_baku": "1.04.05.2.01.0012.5.2.04.01.001.00004"
           },
           {
             "awalan": "1.04.05.2.01.0011",
-            "kategori": "Saluran"
+            "kategori": "Saluran",
+            "mak_baku": "1.04.05.2.01.0011.5.2.04.02.002.00004"
           }
         ],
         "satuan_salah": {
@@ -69,6 +71,52 @@
           ],
           "Saluran": [
             "M2"
+          ]
+        }
+      },
+      "lokasi": {
+        "sumber_wilayah": "https://id.wikipedia.org/wiki/Daftar_kecamatan_dan_kelurahan_di_Kota_Pontianak (diambil 2026-10-08): 6 kecamatan, 29 kelurahan. Ejaan dipisah spasi; pencocokan tidak peduli spasi/huruf besar. Mohon verifikasi dengan Perwali/portal Pemkot Pontianak bila ada pemekaran.",
+        "wilayah": {
+          "Pontianak Barat": [
+            "Pal Lima",
+            "Sungai Beliung",
+            "Sungai Jawi Dalam",
+            "Sungai Jawi Luar"
+          ],
+          "Pontianak Kota": [
+            "Darat Sekip",
+            "Mariana",
+            "Sungai Bangkong",
+            "Sungai Jawi",
+            "Tengah"
+          ],
+          "Pontianak Selatan": [
+            "Akcaya",
+            "Benua Melayu Darat",
+            "Benua Melayu Laut",
+            "Kota Baru",
+            "Parit Tokaya"
+          ],
+          "Pontianak Tenggara": [
+            "Bangka Belitung Darat",
+            "Bangka Belitung Laut",
+            "Bansir Darat",
+            "Bansir Laut"
+          ],
+          "Pontianak Timur": [
+            "Banjar Serasan",
+            "Dalam Bugis",
+            "Parit Mayor",
+            "Saigon",
+            "Tambelan Sampit",
+            "Tanjung Hulu",
+            "Tanjung Hilir"
+          ],
+          "Pontianak Utara": [
+            "Batu Layang",
+            "Siantan Hilir",
+            "Siantan Hulu",
+            "Siantan Tengah"
           ]
         }
       }

@@ -10,8 +10,7 @@
     --accent: #1f5fbf; --accent-soft: #e6eefb; --ok: #1a7f4b; --ok-soft: #e3f5ea;
     --warn: #b45309; --warn-soft: #fdf1dc; --bar: #9db9e6;
     --jalan: #b45309; --jalan-soft: #fdf1dc; --saluran: #0e7490; --saluran-soft: #def3f8;
-    --lain: #5b6472; --lain-soft: #eceff3;
-    --err: #b42318; --err-soft: #fde8e6;
+    --lain: #5b6472; --lain-soft: #eceff3; --err: #b42318; --err-soft: #fde8e6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -19,20 +18,19 @@
       --accent: #6aa3f5; --accent-soft: #1d2b42; --ok: #5fcf93; --ok-soft: #17301f;
       --warn: #f0b35a; --warn-soft: #3a2c14; --bar: #3a5a8f;
       --jalan: #f0b35a; --jalan-soft: #3a2c14; --saluran: #62cbe3; --saluran-soft: #123340;
-      --lain: #a3adba; --lain-soft: #252c36;
-      --err: #ff8a80; --err-soft: #3d1b19;
+      --lain: #a3adba; --lain-soft: #252c36; --err: #ff8a80; --err-soft: #3d1b19;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
   header { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
   h1 { font-size: 20px; margin: 0; }
-  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .sub { color: var(--muted); font-size: 12.5px; }
   .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .btn, select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
-         padding: 7px 12px; font: inherit; cursor: pointer; }
+         padding: 6px 10px; font: inherit; cursor: pointer; max-width: 340px; }
   .btn:hover, select:hover { border-color: var(--accent); }
   .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
@@ -56,79 +54,88 @@
   .cat .rinci { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12.5px; }
   .cat .rinci b { font-weight: 600; }
   .gabung { color: var(--muted); font-size: 13px; margin: 0 0 14px 2px; }
-  .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
+  .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; }
   .note.ok { background: var(--ok-soft); color: var(--ok); }
   .note.warn { background: var(--warn-soft); color: var(--warn); }
   .note.err { background: var(--err-soft); color: var(--err); }
   .note button { background: none; border: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
-  .chip { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 6px 12px;
-          font: inherit; cursor: pointer; text-align: left; }
-  .chip.err { border-color: var(--err); } .chip.peringatan { border-color: var(--warn); }
-  .chip.aktif { box-shadow: 0 0 0 2px var(--accent) inset; }
-  .chip b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
-  .chip small { color: var(--muted); }
-  .matriks { margin: 12px; width: auto; }
-  .matriks caption { text-align: left; color: var(--muted); font-size: 12px; padding-bottom: 6px; }
-  .matriks td.salah { background: var(--err-soft); color: var(--err); font-weight: 600; }
-  .matriks td.belum { background: var(--warn-soft); color: var(--warn); }
-  .tag.kesalahan { background: var(--err-soft); color: var(--err); }
-  .tag.peringatan { background: var(--warn-soft); color: var(--warn); }
-  .badge { background: var(--err); color: #fff; border-radius: 99px; font-size: 11px; padding: 0 7px; margin-left: 6px; }
-  .badge.w { background: var(--warn); }
   .tabs { display: flex; gap: 4px; margin-bottom: -1px; position: relative; flex-wrap: wrap; }
   .tab { background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 10px 10px 0 0;
-         padding: 8px 16px; font: inherit; color: var(--muted); cursor: pointer; }
+         padding: 8px 14px; font: inherit; color: var(--muted); cursor: pointer; }
   .tab.aktif { background: var(--card); border-color: var(--line); color: var(--text); font-weight: 600; }
+  .badge { background: var(--err); color: #fff; border-radius: 99px; font-size: 11px; padding: 0 7px; margin-left: 6px; }
+  .badge.w { background: var(--warn); }
   .panel { background: var(--card); border: 1px solid var(--line); border-radius: 0 12px 12px 12px; overflow: hidden; }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); align-items: center; }
-  .tools input[type=search] { flex: 1 1 240px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  .tools input[type=search] { flex: 1 1 260px; min-width: 180px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
                  background: var(--bg); color: var(--text); font: inherit; }
+  #filter { display: contents; }
+  .flab { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
   .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .seg button { background: var(--card); color: var(--text); border: none; padding: 6px 12px; font: inherit; cursor: pointer; }
   .seg button + button { border-left: 1px solid var(--line); }
   .seg button.aktif { background: var(--accent); color: #fff; }
   .scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
        white-space: nowrap; user-select: none; }
   th.s { cursor: pointer; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tfoot td { font-weight: 650; background: var(--bg); }
   tr.grup { cursor: pointer; }
   tr.grup:hover { background: var(--accent-soft); }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; word-break: break-all; }
   .bar { height: 4px; background: var(--bar); border-radius: 99px; margin-top: 5px; }
-  tr.rinci > td { background: var(--bg); padding: 0 12px 12px 36px; }
-  tr.rinci table { margin-top: 8px; }
+  tr.rinci > td { background: var(--bg); padding: 0 12px 12px 28px; }
+  tr.rinci table { margin-top: 8px; background: var(--card); }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  .tag { font-size: 11px; border-radius: 99px; padding: 1px 8px; background: var(--lain-soft); color: var(--lain); white-space: nowrap; }
-  .tag.Jalan { background: var(--jalan-soft); color: var(--jalan); }
-  .tag.Saluran { background: var(--saluran-soft); color: var(--saluran); }
+  .tag { font-size: 11px; border-radius: 99px; padding: 1px 8px; background: var(--lain-soft); color: var(--lain); white-space: nowrap; display: inline-block; }
+  .tag.Jalan, .tag.KJalan { background: var(--jalan-soft); color: var(--jalan); }
+  .tag.Saluran, .tag.KSaluran { background: var(--saluran-soft); color: var(--saluran); }
+  .tag.kesalahan, .tag.salah { background: var(--err-soft); color: var(--err); }
+  .tag.peringatan { background: var(--warn-soft); color: var(--warn); }
+  .tag.ok { background: var(--ok-soft); color: var(--ok); }
   .kosong { padding: 28px; text-align: center; color: var(--muted); }
   .caret { display: inline-block; width: 14px; color: var(--muted); }
   .ringkasan { padding: 10px 12px; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--line); }
   .ringkasan b { color: var(--text); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 6px 12px;
+          font: inherit; cursor: pointer; text-align: left; }
+  .chip.err { border-color: var(--err); } .chip.peringatan { border-color: var(--warn); }
+  .chip.aktif { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .chip b { display: block; font-size: 15px; } .chip small { color: var(--muted); }
+  .matriks { margin: 12px; width: auto; }
+  .matriks caption { text-align: left; color: var(--muted); font-size: 12px; padding-bottom: 6px; }
+  .matriks td.salah { background: var(--err-soft); color: var(--err); font-weight: 600; }
+  .matriks td.belum { background: var(--warn-soft); color: var(--warn); }
+  .neg { color: var(--err); } .pos { color: var(--ok); }
+  .halaman { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 12px; flex-wrap: wrap; }
+  dl.detail { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 20px; margin: 10px 0 0; }
+  dl.detail div { min-width: 0; }
+  dl.detail dt { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+  dl.detail dd { margin: 0; word-break: break-word; }
+  .gtitle { font-weight: 650; margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+  .gtitle:first-child { border-top: none; padding-top: 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div>
-      <h1>Rekap RUP — Pagu per MAK, Uraian, Jalan &amp; Saluran</h1>
+      <h1>Rekap RUP — MAK, Uraian, Jalan &amp; Saluran, Database</h1>
       <div class="sub" id="sub">Memuat…</div>
     </div>
     <div class="ctl">
       <span class="live" id="live"><i class="dot"></i><span id="liveTeks">…</span></span>
+      <label class="sub" for="tahun">Tahun</label>
+      <select id="tahun" aria-label="Tahun anggaran"></select>
       <label class="sub" for="interval">Auto-refresh</label>
       <select id="interval" aria-label="Interval auto-refresh">
-        <option value="0">Mati</option>
-        <option value="5">5 detik</option>
-        <option value="10">10 detik</option>
-        <option value="30">30 detik</option>
-        <option value="60">1 menit</option>
-        <option value="300">5 menit</option>
+        <option value="0">Mati</option><option value="5">5 detik</option><option value="10">10 detik</option>
+        <option value="30">30 detik</option><option value="60">1 menit</option><option value="300">5 menit</option>
       </select>
       <button class="btn" id="muat">Muat ulang</button>
       <button class="btn" id="unduh">Unduh CSV</button>
@@ -142,80 +149,118 @@
 
   <div class="tabs" id="tabs" role="tablist"></div>
   <div class="panel">
-    <div class="tools" id="tools"></div>
+    <div class="tools"><input id="cari" type="search" aria-label="Cari"><span id="filter"></span><span class="sub" id="hitung"></span></div>
     <div id="ringkasan"></div>
     <div class="scroll"><table id="tabel"></table></div>
+    <div id="halaman"></div>
   </div>
 </div>
 
 <script>
+/* ======================= util ======================= */
 const $ = (id) => document.getElementById(id);
 const rp = new Intl.NumberFormat("id-ID");
 const fmt = (n) => "Rp " + rp.format(Math.round(n || 0));
 function ringkas(n) {
   n = n || 0;
   const t = (x, s) => "Rp " + x.toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " " + s;
-  if (n >= 1e12) return t(n / 1e12, "T");
-  if (n >= 1e9) return t(n / 1e9, "M");
-  if (n >= 1e6) return t(n / 1e6, "jt");
+  if (Math.abs(n) >= 1e12) return t(n / 1e12, "T");
+  if (Math.abs(n) >= 1e9) return t(n / 1e9, "M");
+  if (Math.abs(n) >= 1e6) return t(n / 1e6, "jt");
   return fmt(n);
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const simpan = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const baca = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
-
+const gabung = (a) => Array.isArray(a) ? a.join("; ") : (a ?? "");
+const selisihTag = (n) => n === 0 ? "–" : `<span class="${n < 0 ? "neg" : "pos"}">${n > 0 ? "+" : "−"}${fmt(Math.abs(n))}</span>`;
 const WARNA = { Jalan: "var(--jalan)", Saluran: "var(--saluran)", Lainnya: "var(--lain)" };
-let data = null, teksTerakhir = "", tab = baca("rekap_tab", "mak"), kat = baca("rekap_kat", "Jalan"), jenisFilter = "Semua";
-let tingkatFilter = "Semua", jenisTemuan = "Semua";
-let interval = parseInt(baca("rekap_interval", "30"), 10);
-let urut = { mak: { k: "total_pagu", asc: false }, uraian: { k: "total_pagu", asc: false } };
-const buka = { mak: new Set(), uraian: new Set() };
-let timer = null, sedang = false;
+const tagJenis = (j) => j ? `<span class="tag ${j.replace("Konsultan ", "K")}">${esc(j)}</span>` : "";
+const tagStatus = (s) => s ? `<span class="tag ${s === "Salah MAK" ? "salah" : s === "Sesuai" ? "ok" : ""}">${esc(s)}</span>` : "";
+const pk = (k) => data.paket[k];
+const wil = (nilai, asli) => esc(nilai || "") + (asli && nilai !== asli ? ` <span class="tag peringatan" title="Tertulis di nama paket: ${esc(asli)}">${nilai ? "eja diperbaiki" : "tidak dikenal"}</span>${nilai ? `<div class="sub">tertulis: ${esc(asli)}</div>` : `<div class="sub">${esc(asli)}</div>`}` : "");
+const teksPaket = (p) => [p.kode_rup, p.nama_paket, p.uraian, p.jalan, gabung(p.gang), gabung(p.komplek), p.kecamatan].join(" ").toLowerCase();
 
-/* ---------- ambil data + auto-refresh ---------- */
+/* ======================= state ======================= */
+let data = null, teksTerakhir = "", tab = baca("rekap_tab", "mak");
+let interval = parseInt(baca("rekap_interval", "30"), 10), timer = null, sedang = false;
+let tahun = baca("rekap_tahun", "");
+const qs = () => (tahun ? `?tahun=${encodeURIComponent(tahun)}` : "");
+const FILTER = {
+  kategori: { kat: "Jalan", jp: "Semua", mak: "Semua" },
+  perbaikan: { jp: "Semua" },
+  lokasi: { mode: "jalan", kec: "Semua", kat: "Semua" },
+  periksa: { tingkat: "Semua", jenis: "Semua" },
+  database: { aktif: "Ya", kategori: "Semua", jenis_kegiatan: "Semua", jenis_pekerjaan: "Semua", status_mak: "Semua",
+              jenis: "Semua", metode_pemilihan: "Semua", sumber_dana: "Semua", kecamatan: "Semua", kelurahan: "Semua", mak_akhir: "Semua", temuan: "Semua" },
+};
+const urut = { mak: { k: "total_pagu", asc: false }, uraian: { k: "total_pagu", asc: false }, database: { k: "kode_rup", asc: true } };
+const buka = { mak: new Set(), uraian: new Set(), perbaikan: new Set(), lokasi: new Set(), database: new Set() };
+const DB = { baris: null, kolom: null, versi: null, error: null, hal: 0, per: 50, sedang: false };
+
+/* ======================= ambil data + auto-refresh ======================= */
 async function muat() {
   if (sedang) return;
   sedang = true;
   try {
-    const r = await fetch("/api/rekap", { cache: "no-store" });
+    const r = await fetch("/api/rekap" + qs(), { cache: "no-store" });
     const teks = await r.text();
     const j = JSON.parse(teks);
     if (!r.ok) throw new Error(j.error || r.status);
-    if (teks !== teksTerakhir) {   // gambar ulang hanya bila data benar-benar berubah
-      teksTerakhir = teks;
-      data = j;
-      if (data.klasifikasi && !data.klasifikasi[kat]) kat = Object.keys(data.klasifikasi)[0];
-      if (tab === "kategori" && !data.klasifikasi) tab = "mak";
-      if (tab === "periksa" && !data.periksa) tab = "mak";
+    if (teks !== teksTerakhir) {
+      teksTerakhir = teks; data = j;
+      isiTahun();
+      if (!tabTersedia(tab)) tab = "mak";
+      const ks = data.klasifikasi && Object.keys(data.klasifikasi);
+      if (ks && !data.klasifikasi[FILTER.kategori.kat]) FILTER.kategori.kat = ks[0];
       gambar();
     }
     status("ok");
-  } catch (e) {
-    status("err", e.message);
-  } finally {
-    sedang = false;
-  }
+  } catch (e) { status("err", e.message); } finally { sedang = false; }
+}
+async function muatDb() {
+  if (!data || DB.sedang || (DB.versi === data.versi && DB.baris)) return;
+  DB.sedang = true;
+  try {
+    const r = await fetch("/api/database" + qs(), { cache: "no-store" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    j.baris.forEach((b) => { b._q = [b.kode_rup, b.nama_paket, b.uraian, b.spesifikasi, b.volume, b.lokasi_pekerjaan, gabung(b.mak), gabung(b.mak_akhir),
+      b.jalan, gabung(b.gang), gabung(b.komplek), b.kecamatan, b.kelurahan, b.jenis_kegiatan, b.penyelenggara, b.metode_pemilihan, b.sumber_dana, b.jenis_pengadaan].join(" ").toLowerCase(); });
+    DB.baris = j.baris; DB.kolom = j.kolom; DB.versi = j.versi; DB.error = null;
+  } catch (e) { DB.error = e.message; } finally { DB.sedang = false; }
+  if (tab === "database") { filterUI(); isiTabel(); }
 }
 function status(s, pesan) {
-  const el = $("live"), jam = new Date().toLocaleTimeString("id-ID");
-  el.className = "live " + (s === "err" ? "err" : interval > 0 ? "on" : "");
-  $("liveTeks").textContent = s === "err" ? `Gagal memuat (${pesan}) — data lama ditampilkan` : `Diperbarui ${jam}`;
+  $("live").className = "live " + (s === "err" ? "err" : interval > 0 ? "on" : "");
+  $("liveTeks").textContent = s === "err" ? `Gagal memuat (${pesan}) — data lama ditampilkan` : `Diperbarui ${new Date().toLocaleTimeString("id-ID")}`;
 }
-function aturTimer() {
-  clearInterval(timer);
-  if (interval > 0) timer = setInterval(() => { if (!document.hidden) muat(); }, interval * 1000);
-}
+function aturTimer() { clearInterval(timer); if (interval > 0) timer = setInterval(() => { if (!document.hidden) muat(); }, interval * 1000); }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && interval > 0) muat(); });
 $("interval").value = String(interval);
-$("interval").addEventListener("change", (e) => {
-  interval = parseInt(e.target.value, 10);
-  simpan("rekap_interval", interval);
-  aturTimer();
+$("interval").addEventListener("change", (e) => { interval = parseInt(e.target.value, 10); simpan("rekap_interval", interval); aturTimer(); muat(); });
+$("muat").addEventListener("click", () => { DB.versi = null; muat().then(() => tab === "database" && muatDb()); });
+
+function isiTahun() {
+  const aktif = String(data.target.tahun), th = data.tahun_tersedia.map(String);
+  if (!th.includes(aktif)) th.push(aktif);
+  $("tahun").innerHTML = th.sort().map((y) => `<option value="${y}" ${y === aktif ? "selected" : ""}>${y}</option>`).join("") + `<option value="__lain">Tahun lain…</option>`;
+}
+$("tahun").addEventListener("change", (e) => {
+  let v = e.target.value;
+  if (v === "__lain") { v = (prompt("Tahun anggaran (mis. 2025). Jika datanya belum diambil, jalankan dulu 'Ambil Data SiRUP' untuk tahun itu:") || "").trim(); if (!/^\d{4}$/.test(v)) { isiTahun(); return; } }
+  tahun = v; simpan("rekap_tahun", v);
+  teksTerakhir = ""; DB.baris = null; DB.versi = null; Object.values(buka).forEach((x) => x.clear());
   muat();
 });
-$("muat").addEventListener("click", muat);
 
-/* ---------- gambar ---------- */
+/* ======================= bagian atas ======================= */
+function tabTersedia(t) {
+  if (t === "kategori" || t === "perbaikan") return !!data.klasifikasi;
+  if (t === "lokasi") return data.lokasi && data.lokasi.jalan.length > 0;
+  if (t === "periksa") return !!data.periksa;
+  return true;
+}
 function gambar() {
   const d = data, t = d.target;
   const sedangDiambil = d.detail_terakhir_diambil && (Date.now() - new Date(d.detail_terakhir_diambil).getTime() < 30000);
@@ -224,106 +269,158 @@ function gambar() {
     (sedangDiambil ? " · ● pengambilan detail sedang berjalan" : "");
   const persen = d.paket_aktif ? (d.paket_dengan_detail * 100 / d.paket_aktif) : 0;
   $("kpis").innerHTML = `
-    <div class="kpi"><div class="l">Paket yang sudah diambil detailnya</div>
-      <div class="v">${rp.format(d.paket_dengan_detail)}</div>
+    <div class="kpi"><div class="l">Paket yang sudah diambil detailnya</div><div class="v">${rp.format(d.paket_dengan_detail)}</div>
       <div class="s">dari ${rp.format(d.paket_aktif)} paket aktif (${persen.toFixed(1)}%)</div>
       <div class="progress"><i style="width:${persen}%"></i></div></div>
-    <div class="kpi"><div class="l">Total pagu (paket ber-detail)</div>
-      <div class="v">${ringkas(d.total_pagu_mak)}</div><div class="s">${fmt(d.total_pagu_mak)}</div></div>
-    <div class="kpi"><div class="l">MAK berbeda</div>
-      <div class="v">${rp.format(d.jumlah_mak)}</div>
+    <div class="kpi"><div class="l">Total pagu (paket ber-detail)</div><div class="v">${ringkas(d.total_pagu_mak)}</div><div class="s">${fmt(d.total_pagu_mak)}</div></div>
+    <div class="kpi"><div class="l">MAK berbeda</div><div class="v">${rp.format(d.jumlah_mak)}</div>
       <div class="s">rata-rata ${d.jumlah_mak ? (d.paket_dengan_detail / d.jumlah_mak).toFixed(1) : 0} paket per MAK</div></div>
-    <div class="kpi"><div class="l">Uraian unik</div>
-      <div class="v">${rp.format(d.jumlah_uraian)}</div><div class="s">setelah dirapikan (spasi, ';', pengulangan)</div></div>`;
+    <div class="kpi"><div class="l">Uraian unik</div><div class="v">${rp.format(d.jumlah_uraian)}</div><div class="s">setelah dirapikan</div></div>
+    ${d.lokasi ? `<div class="kpi"><div class="l">Jalan · Gang (fisik)</div><div class="v">${rp.format(d.lokasi.jalan.length)} · ${rp.format(d.lokasi.gang.length)}</div><div class="s">dari nama paket fisik Jalan/Saluran</div></div>` : ""}`;
 
   const k = d.klasifikasi;
   if (k) {
+    const per = d.perbaikan.Semua;
     $("cats").innerHTML = Object.entries(k).map(([nama, g]) => `
-      <button class="cat ${nama === kat && tab === "kategori" ? "pilih" : ""}" data-kat="${esc(nama)}" style="--c:${WARNA[nama] || "var(--accent)"}">
-        <div class="l">${esc(nama)}</div>
-        <div class="v">${ringkas(g.total_pagu)}</div>
+      <button class="cat ${nama === FILTER.kategori.kat && tab === "kategori" ? "pilih" : ""}" data-kat="${esc(nama)}" style="--c:${WARNA[nama] || "var(--accent)"}">
+        <div class="l">${esc(nama)}</div><div class="v">${ringkas(g.total_pagu)}</div>
         <div class="s">${fmt(g.total_pagu)} · ${rp.format(g.jumlah_paket)} paket · ${d.total_pagu_mak ? (g.total_pagu * 100 / d.total_pagu_mak).toFixed(1) : 0}%</div>
         <div class="rinci"><span>Fisik <b>${ringkas(g.Fisik.total_pagu)}</b> (${g.Fisik.jumlah_paket})</span>
-        <span>Konsultan <b>${ringkas(g.Konsultan.total_pagu)}</b> (${g.Konsultan.jumlah_paket})</span></div>
-      </button>`).join("");
+        <span>Konsultan <b>${ringkas(g.Konsultan.total_pagu)}</b> (${g.Konsultan.jumlah_paket})</span></div></button>`).join("");
     const js = (k.Jalan?.total_pagu || 0) + (k.Saluran?.total_pagu || 0), jp = (k.Jalan?.jumlah_paket || 0) + (k.Saluran?.jumlah_paket || 0);
-    $("gabung").innerHTML = `<b>Jalan + Saluran:</b> ${fmt(js)} · ${rp.format(jp)} paket (${d.total_pagu_mak ? (js * 100 / d.total_pagu_mak).toFixed(1) : 0}% dari total)`;
+    $("gabung").innerHTML = `<b>Jalan + Saluran:</b> ${fmt(js)} · ${rp.format(jp)} paket (${d.total_pagu_mak ? (js * 100 / d.total_pagu_mak).toFixed(1) : 0}% dari total)` +
+      (per.ada_perbaikan ? ` · <button class="btn" data-tab="perbaikan" style="padding:2px 8px">lihat rekap perbaikan MAK</button>` : "");
   } else { $("cats").innerHTML = ""; $("gabung").textContent = ""; }
 
-  $("catatan").innerHTML = d.paket_dengan_detail === 0
-    ? `<div class="note warn">Belum ada paket yang detailnya diambil. Jalankan <b>Ambil Detail SiRUP.command</b> dulu.</div>`
+  let cat = d.paket_aktif === 0
+    ? `<div class="note warn">Belum ada data SiRUP untuk tahun <b>${t.tahun}</b>. Jalankan <b>Ambil Data SiRUP.command</b> lalu isi tahun ${t.tahun}, kemudian <b>Ambil Detail SiRUP.command</b>.</div>`
+    : d.paket_dengan_detail === 0
+    ? `<div class="note warn">Belum ada paket yang detailnya diambil untuk tahun ${t.tahun}. Jalankan <b>Ambil Detail SiRUP.command</b> (isi tahun ${t.tahun}).</div>`
     : Math.abs(d.selisih) < 0.5
       ? `<div class="note ok">Cocok: jumlah pagu per MAK (${fmt(d.total_pagu_mak)}) sama dengan jumlah pagu paket di daftar SiRUP.</div>`
       : `<div class="note warn">Perlu dicek: jumlah pagu per MAK berbeda ${fmt(d.selisih)} dari pagu paket di daftar (${fmt(d.total_pagu_daftar)}).</div>`;
-
   const pr = d.periksa, nE = pr?.jumlah_kesalahan || 0, nW = pr?.jumlah_peringatan || 0;
-  if (pr && d.paket_dengan_detail > 0) {
-    $("catatan").innerHTML += nE ? `<div class="note err"><b>${rp.format(nE)} kesalahan</b>${nW ? ` dan ${rp.format(nW)} peringatan` : ""} terdeteksi. ${
-        Object.values(pr.ringkas).filter((r) => r.tingkat === "kesalahan").map((r) => `${esc(r.judul)}: ${rp.format(r.jumlah)} paket (${ringkas(r.pagu)})`).join(" · ")} — <button data-tab="periksa">lihat pemeriksaan</button></div>`
-      : nW ? `<div class="note warn">${rp.format(nW)} peringatan perlu dilihat — <button data-tab="periksa">lihat pemeriksaan</button></div>`
-      : `<div class="note ok">Pemeriksaan: tidak ada kesalahan atau peringatan.</div>`;
-  }
+  if (pr && d.paket_dengan_detail > 0) cat += nE
+    ? `<div class="note err"><b>${rp.format(nE)} kesalahan</b>${nW ? ` dan ${rp.format(nW)} peringatan` : ""} terdeteksi. ${Object.values(pr.ringkas).filter((r) => r.tingkat === "kesalahan").map((r) => `${esc(r.judul)}: ${rp.format(r.jumlah)} paket (${ringkas(r.pagu)})`).join(" · ")} — <button data-tab="periksa">lihat pemeriksaan</button></div>`
+    : nW ? `<div class="note warn">${rp.format(nW)} peringatan perlu dilihat — <button data-tab="periksa">lihat pemeriksaan</button></div>`
+    : `<div class="note ok">Pemeriksaan: tidak ada kesalahan atau peringatan.</div>`;
+  $("catatan").innerHTML = cat;
+
   const badge = nE ? `<span class="badge">${nE}</span>` : nW ? `<span class="badge w">${nW}</span>` : "";
-  const daftarTab = [["mak", "Per MAK"], ["uraian", "Per Uraian"]].concat(k ? [["kategori", "Jalan & Saluran"]] : []).concat(pr ? [["periksa", "Pemeriksaan" + badge]] : []);
-  $("tabs").innerHTML = daftarTab.map(([id, l]) => `<button class="tab ${id === tab ? "aktif" : ""}" data-tab="${id}" role="tab">${l}</button>`).join("");
-  isiPeralatan();
+  const semua = [["mak", "Per MAK"], ["uraian", "Per Uraian"], ["kategori", "Jalan & Saluran"], ["perbaikan", "Perbaikan MAK"],
+                 ["lokasi", "Jalan & Gang"], ["database", "Database"], ["periksa", "Pemeriksaan" + badge]];
+  $("tabs").innerHTML = semua.filter(([id]) => tabTersedia(id)).map(([id, l]) => `<button class="tab ${id === tab ? "aktif" : ""}" data-tab="${id}" role="tab">${l}</button>`).join("");
+  filterUI();
   isiTabel();
+  if (tab === "database") muatDb();
 }
 
-let sigAlat = "";
-function isiPeralatan() {
-  // jangan bangun ulang kolom pencarian saat auto-refresh (kursor & ketikan harus tetap)
-  const sig = [tab, kat, jenisFilter, tingkatFilter, jenisTemuan, data.klasifikasi ? Object.keys(data.klasifikasi).join() : ""].join("|");
-  if (sig === sigAlat && $("cari")) return;
-  sigAlat = sig;
-  const cari = $("cari")?.value ?? "";
-  let h = `<input id="cari" type="search" placeholder="Cari nama paket, kode RUP, MAK, atau uraian…" aria-label="Cari" value="${esc(cari)}">`;
-  if (tab === "kategori" && data.klasifikasi) {
-    h += `<span class="seg">${Object.keys(data.klasifikasi).map((n) => `<button data-kat="${esc(n)}" class="${n === kat ? "aktif" : ""}">${esc(n)}</button>`).join("")}</span>`;
-    h += `<span class="seg">${["Semua", "Fisik", "Konsultan"].map((j) => `<button data-jenis="${j}" class="${j === jenisFilter ? "aktif" : ""}">${j}</button>`).join("")}</span>`;
+/* ======================= kontrol filter ======================= */
+const seg = (kunci, opsi, nilai) => `<span class="seg">${opsi.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, o];
+  return `<button data-f="${kunci}" data-v="${esc(v)}" class="${v === nilai ? "aktif" : ""}">${esc(l)}</button>`; }).join("")}</span>`;
+const sel = (kunci, label, opsi, nilai) => `<label class="flab">${esc(label)}<select data-f="${kunci}">${opsi.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, o];
+  return `<option value="${esc(v)}" ${v === nilai ? "selected" : ""}>${esc(l)}</option>`; }).join("")}</select></label>`;
+const SEMUA = (txt) => ["Semua", txt || "Semua"];
+
+function unik(arr) { return [...new Set(arr.filter((x) => x !== null && x !== undefined && x !== ""))].sort(); }
+function itemsKategori(abaikanMak) {
+  const f = FILTER.kategori;
+  return data.klasifikasi[f.kat].paket.map(pk).filter((p) => (f.jp === "Semua" || p.jenis_pekerjaan === f.jp) && (abaikanMak || f.mak === "Semua" || p.mak_akhir.includes(f.mak)));
+}
+function filterUI() {
+  const f = FILTER[tab];
+  let h = "";
+  if (tab === "kategori") {
+    const hit = {}; itemsKategori(true).forEach((p) => p.mak_akhir.forEach((m) => hit[m] = (hit[m] || 0) + 1));
+    if (f.mak !== "Semua" && !hit[f.mak]) f.mak = "Semua";
+    h = seg("kat", Object.keys(data.klasifikasi), f.kat) + seg("jp", ["Semua", "Fisik", "Konsultan"], f.jp) +
+        sel("mak", "MAK Perbaikan", [SEMUA("Semua MAK")].concat(Object.keys(hit).sort().map((m) => [m, `${m} (${hit[m]})`])), f.mak);
+  } else if (tab === "perbaikan") h = seg("jp", ["Semua", "Fisik", "Konsultan"], f.jp);
+  else if (tab === "lokasi") h = seg("mode", [["jalan", "Nama Jalan"], ["gang", "Nama Gang & Komplek"]], f.mode) +
+      sel("kec", "Kecamatan", [SEMUA("Semua kecamatan")].concat(unik(data.lokasi.jalan.flatMap((j) => j.kecamatan))), f.kec) +
+      seg("kat", ["Semua", "Jalan", "Saluran"], f.kat);
+  else if (tab === "periksa") h = seg("tingkat", ["Semua", "kesalahan", "peringatan"], f.tingkat) +
+      sel("jenis", "Jenis", [SEMUA("Semua jenis temuan")].concat(Object.entries(data.periksa.ringkas).map(([k, r]) => [k, `${r.judul} (${r.jumlah})`])), f.jenis);
+  else if (tab === "database") {
+    if (!DB.baris) h = `<span class="sub">${DB.error ? "Gagal memuat database: " + esc(DB.error) : "Memuat database…"}</span>`;
+    else {
+      const o = (k, label) => sel(k, label, [SEMUA("Semua")].concat(unik(DB.baris.map((b) => b[k]))), f[k]);
+      h = sel("aktif", "Aktif", [["Semua", "Semua"], ["Ya", "Ya"], ["Tidak", "Tidak"]], f.aktif) + o("kategori", "Kategori") + o("jenis_kegiatan", "Jenis Kegiatan") +
+          o("jenis_pekerjaan", "Fisik/Konsultan") + o("status_mak", "Status MAK") + o("jenis", "Penyedia/Swakelola") + o("metode_pemilihan", "Metode") +
+          o("sumber_dana", "Sumber Dana") + o("kecamatan", "Kecamatan") + o("kelurahan", "Kelurahan") +
+          sel("mak_akhir", "MAK Seharusnya", [SEMUA("Semua MAK")].concat(unik(DB.baris.flatMap((b) => b.mak_akhir))), f.mak_akhir) +
+          sel("temuan", "Temuan", [["Semua", "Semua"], ["Ada", "Ada temuan"], ["Tanpa", "Tanpa temuan"]], f.temuan);
+    }
   }
-  if (tab === "periksa") {
-    h += `<span class="seg">${["Semua", "kesalahan", "peringatan"].map((j) => `<button data-tingkat="${j}" class="${j === tingkatFilter ? "aktif" : ""}">${j === "Semua" ? "Semua" : j[0].toUpperCase() + j.slice(1)}</button>`).join("")}</span>`;
-    h += `<select id="selJenis" aria-label="Jenis temuan"><option value="Semua">Semua jenis temuan</option>${Object.entries(data.periksa.ringkas).map(([k2, r]) => `<option value="${k2}" ${k2 === jenisTemuan ? "selected" : ""}>${esc(r.judul)} (${r.jumlah})</option>`).join("")}</select>`;
+  $("filter").innerHTML = h;
+  const ph = { mak: "Cari MAK, nama paket, kode RUP…", uraian: "Cari uraian, nama paket, kode RUP…", kategori: "Cari nama paket, jalan, gang, kode RUP…",
+    perbaikan: "Cari MAK, nama paket, jalan, kode RUP…", lokasi: "Cari nama jalan, gang, kecamatan…", periksa: "Cari nama paket, kode RUP, pesan…",
+    database: "Cari di semua kolom (nama, uraian, spesifikasi, jalan, gang, MAK, lokasi…)" };
+  $("cari").placeholder = ph[tab] || "Cari…";
+}
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-kat]");
+  if (c) { FILTER.kategori.kat = c.dataset.kat; FILTER.kategori.mak = "Semua"; pindahTab("kategori"); return; }
+  const t = e.target.closest("[data-tab]");
+  if (t) { pindahTab(t.dataset.tab); return; }
+  const f = e.target.closest("button[data-f]");
+  if (f) { aturFilter(f.dataset.f, f.dataset.v); return; }
+  const jt = e.target.closest("[data-jenistemuan]");
+  if (jt) { FILTER.periksa.jenis = FILTER.periksa.jenis === jt.dataset.jenistemuan ? "Semua" : jt.dataset.jenistemuan; filterUI(); isiTabel(); return; }
+  const th = e.target.closest("th[data-k]");
+  if (th && urut[tab]) {
+    const k = th.dataset.k, u = urut[tab];
+    urut[tab] = { k, asc: u.k === k ? !u.asc : ["mak", "uraian", "nama_paket", "kode_rup"].includes(k) };
+    DB.hal = 0; isiTabel(); return;
   }
-  h += `<span class="sub" id="hitung"></span>`;
-  $("tools").innerHTML = h;
-  $("cari").addEventListener("input", isiTabel);
-  $("selJenis")?.addEventListener("change", (e) => { jenisTemuan = e.target.value; isiPeralatan(); isiTabel(); });
+  const hal = e.target.closest("[data-hal]");
+  if (hal) { DB.hal = Math.max(0, DB.hal + parseInt(hal.dataset.hal, 10)); isiTabel(); window.scrollTo({ top: $("tabs").offsetTop - 10 }); return; }
+  const tr = e.target.closest("tr.grup");
+  if (tr && !e.target.closest("a")) { const id = tr.dataset.id; buka[tab].has(id) ? buka[tab].delete(id) : buka[tab].add(id); isiTabel(); }
+});
+document.addEventListener("change", (e) => {
+  if (e.target.matches("select[data-f]")) aturFilter(e.target.dataset.f, e.target.value);
+  if (e.target.id === "perhal") { DB.per = parseInt(e.target.value, 10); DB.hal = 0; isiTabel(); }
+});
+function aturFilter(k, v) {
+  FILTER[tab][k] = v;
+  if (tab === "kategori" && (k === "kat" || k === "jp")) FILTER.kategori.mak = "Semua";
+  DB.hal = 0;
+  filterUI(); isiTabel();
 }
+function pindahTab(t) { tab = t; simpan("rekap_tab", t); DB.hal = 0; $("cari").value = ""; gambar(); }
+$("cari").addEventListener("input", () => { DB.hal = 0; isiTabel(); });
 
-function cocok(p, q) {
-  return !q || p.nama_paket.toLowerCase().includes(q) || p.kode_rup.includes(q) || p.uraian.toLowerCase().includes(q);
-}
-const tagKat = (p) => p.kategori ? `<span class="tag ${esc(p.kategori)}">${esc(p.kategori)}${p.kategori !== "Lainnya" ? " · " + esc(p.jenis_pekerjaan) : ""}</span>` : "";
-const barisPaket = (p, nilai, catatan) => `<tr>
-  <td class="mono"><a href="${esc(p.link)}" target="_blank" rel="noopener">${esc(p.kode_rup)}</a></td>
-  <td>${esc(p.nama_paket)}</td><td>${esc(p.uraian)}</td><td>${tagKat(p)}</td>
-  <td class="num">${fmt(nilai)}${catatan ? `<div class="sub">${catatan}</div>` : ""}</td></tr>`;
-const kepalaPaket = `<thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Uraian</th><th>Kategori</th><th class="num">Pagu</th></tr></thead>`;
-
+/* ======================= tabel ======================= */
+const kepala = (cols) => `<thead><tr>${cols.map(([l, c]) => `<th class="${c || ""}">${l}</th>`).join("")}</tr></thead>`;
+const panah = (k) => urut[tab].k === k ? (urut[tab].asc ? " ▲" : " ▼") : "";
+const aLink = (p) => `<a href="${esc(p.link)}" target="_blank" rel="noopener" class="mono">${esc(p.kode_rup)}</a>`;
+const lokTeks = (p) => p.jalan ? `<b>Jl. ${esc(p.jalan)}</b>${(p.gang || []).length ? `<div class="sub">Gg. ${esc(gabung(p.gang))}</div>` : ""}${(p.komplek || []).length ? `<div class="sub">Komp. ${esc(gabung(p.komplek))}</div>` : ""}` : "";
 function isiTabel() {
-  localStorage_tab();
-  const q = ($("cari")?.value || "").trim().toLowerCase();
-  if (tab === "kategori") return isiKategori(q);
-  if (tab === "periksa") return isiPeriksa(q);
+  const q = $("cari").value.trim().toLowerCase();
+  $("halaman").innerHTML = "";
+  ({ mak: isiGrup, uraian: isiGrup, kategori: isiKategori, perbaikan: isiPerbaikan, lokasi: isiLokasi, database: isiDatabase, periksa: isiPeriksa })[tab](q);
+}
+
+/* ---- Per MAK / Per Uraian ---- */
+const barisPaket = (p, nilai, cat) => `<tr><td>${aLink(p)}</td><td>${esc(p.nama_paket)}</td><td>${esc(p.uraian)}</td><td>${tagJenis(p.jenis_kegiatan)}</td>
+  <td class="num">${fmt(nilai)}${cat ? `<div class="sub">${cat}</div>` : ""}</td></tr>`;
+const kepalaPaket = kepala([["Kode RUP"], ["Nama paket"], ["Uraian"], ["Jenis kegiatan"], ["Pagu", "num"]]);
+function isiGrup(q) {
   const kunci = tab === "mak" ? "mak" : "uraian", judul = tab === "mak" ? "MAK" : "Uraian";
   const sumber = tab === "mak" ? data.per_mak : data.per_uraian;
   let baris = [];
   for (const g of sumber) {
-    const items = g.paket.map((x) => tab === "mak" ? { p: data.paket[x[0]], nilai: x[1] } : { p: data.paket[x], nilai: data.paket[x].pagu });
+    const items = g.paket.map((x) => tab === "mak" ? { p: pk(x[0]), nilai: x[1] } : { p: pk(x), nilai: pk(x).pagu });
     if (!q || g[kunci].toLowerCase().includes(q)) baris.push({ g, items, saring: false });
-    else { const f = items.filter((i) => cocok(i.p, q)); if (f.length) baris.push({ g, items: f, saring: true }); }
+    else { const f = items.filter((i) => teksPaket(i.p).includes(q)); if (f.length) baris.push({ g, items: f, saring: true }); }
   }
   const { k, asc } = urut[tab];
   baris.sort((a, b) => (typeof a.g[k] === "string" ? a.g[k].localeCompare(b.g[k]) : a.g[k] - b.g[k]) * (asc ? 1 : -1));
   const maks = Math.max(1, ...sumber.map((g) => g.total_pagu));
   $("hitung").textContent = `${baris.length} dari ${sumber.length} ${judul}`;
   $("ringkasan").innerHTML = "";
-  const panah = (c) => urut[tab].k === c ? (urut[tab].asc ? " ▲" : " ▼") : "";
-  $("tabel").innerHTML = `<thead><tr>
-    <th class="s" data-k="${kunci}">${judul}${panah(kunci)}</th>
-    <th class="s num" data-k="jumlah_paket">Jumlah paket${panah("jumlah_paket")}</th>
+  $("tabel").innerHTML = `<thead><tr><th class="s" data-k="${kunci}">${judul}${panah(kunci)}</th><th class="s num" data-k="jumlah_paket">Jumlah paket${panah("jumlah_paket")}</th>
     <th class="s num" data-k="total_pagu">Total pagu${panah("total_pagu")}</th></tr></thead><tbody>` +
     (baris.length ? baris.map(({ g, items, saring }) => {
       const id = g[kunci], terbuka = buka[tab].has(id) || (q && saring);
@@ -335,94 +432,189 @@ function isiTabel() {
     }).join("") : `<tr><td colspan="3" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
 }
 
+/* ---- Jalan & Saluran (+ filter MAK Perbaikan) ---- */
 function isiKategori(q) {
-  const g = data.klasifikasi[kat];
-  const items = g.paket.map((k) => data.paket[k])
-    .filter((p) => (jenisFilter === "Semua" || p.jenis_pekerjaan === jenisFilter) && cocok(p, q))
-    .sort((a, b) => b.pagu - a.pagu);
+  const f = FILTER.kategori;
+  const items = itemsKategori(false).filter((p) => !q || teksPaket(p).includes(q)).sort((a, b) => b.pagu - a.pagu);
   const total = items.reduce((s, p) => s + p.pagu, 0);
   $("hitung").textContent = `${items.length} paket`;
-  $("ringkasan").innerHTML = `<b>${esc(kat)}</b>${jenisFilter !== "Semua" ? " · " + jenisFilter : ""}${q ? " · cocok dengan pencarian" : ""}:
-    <b>${fmt(total)}</b> dari ${rp.format(items.length)} paket` +
-    (kat === "Lainnya" ? ` — paket di sini belum masuk Jalan maupun Saluran; periksa bila ada yang seharusnya masuk (aturan di config/targets.json).` : "");
-  $("tabel").innerHTML = kepalaPaket + "<tbody>" + (items.length ? items.map((p) => barisPaket(p, p.pagu)).join("") : `<tr><td colspan="5" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
+  $("ringkasan").innerHTML = `<div class="ringkasan"><b>${esc(f.kat)}</b>${f.jp !== "Semua" ? " · " + f.jp : ""}${f.mak !== "Semua" ? ` · MAK Perbaikan <span class="mono">${esc(f.mak)}</span>` : ""}: <b>${fmt(total)}</b> dari ${rp.format(items.length)} paket` +
+    (f.kat === "Lainnya" ? ` — belum masuk Jalan maupun Saluran; periksa bila ada yang seharusnya masuk (aturan di config/targets.json).` : "") + `</div>`;
+  $("tabel").innerHTML = kepala([["Kode RUP"], ["Nama paket"], ["Jalan / Gang"], ["Kecamatan"], ["Kelurahan"], ["Jenis kegiatan"], ["MAK tercatat"], ["MAK Perbaikan"], ["Jenis Perbaikan"], ["Pagu", "num"]]) + "<tbody>" +
+    (items.length ? items.map((p) => `<tr><td>${aLink(p)}</td><td>${esc(p.nama_paket)}</td><td>${lokTeks(p)}</td><td>${wil(p.kecamatan, p.kecamatan_asli)}</td><td>${wil(p.kelurahan, p.kelurahan_asli)}</td><td>${tagJenis(p.jenis_kegiatan)}</td>
+      <td class="mono">${esc(p.mak_entri.map((e) => e.mak).join("; "))}</td>
+      <td class="mono">${p.mak_perbaikan.length ? esc(p.mak_perbaikan.join("; ")) : "<span class='sub'>–</span>"}</td>
+      <td>${tagJenis(p.jenis_perbaikan)}</td><td class="num">${fmt(p.pagu)}</td></tr>`).join("") : `<tr><td colspan="10" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
 }
+
+/* ---- Perbaikan MAK: tercatat vs seharusnya ---- */
+function isiPerbaikan(q) {
+  const f = FILTER.perbaikan, r = data.perbaikan[f.jp];
+  const paketMak = (mak) => Object.values(data.paket).filter((p) => (f.jp === "Semua" || p.jenis_pekerjaan === f.jp) && p.mak_entri.some((e) => e.mak === mak || e.mak_akhir === mak));
+  const baris = r.mak.map((b) => ({ b, items: paketMak(b.mak) })).filter(({ b, items }) => !q || b.mak.toLowerCase().includes(q) || items.some((p) => teksPaket(p).includes(q)));
+  $("hitung").textContent = `${baris.length} MAK`;
+  $("ringkasan").innerHTML = r.ada_perbaikan
+    ? `<div class="ringkasan"><b>Ada perbaikan.</b> "Tercatat" = pagu menurut MAK yang diinput dinas; "Seharusnya" = setelah paket Jalan/Saluran yang salah MAK dipindahkan ke MAK baku kategorinya. Total tetap sama: <b>${fmt(r.total_seharusnya)}</b>.</div>`
+    : `<div class="ringkasan">Tidak ada perbaikan MAK untuk filter ini — tercatat sama dengan seharusnya (${fmt(r.total_tercatat)}).</div>`;
+  $("tabel").innerHTML = kepala([["MAK"], ["Jenis"], ["Tercatat", "num"], ["Seharusnya (perbaikan)", "num"], ["Selisih", "num"]]) + "<tbody>" +
+    (baris.length ? baris.map(({ b, items }) => {
+      const terbuka = buka.perbaikan.has(b.mak) || (q && !b.mak.toLowerCase().includes(q));
+      const rinci = terbuka ? `<tr class="rinci"><td colspan="5"><table>${kepala([["Kode RUP"], ["Nama paket"], ["Jenis kegiatan"], ["Jenis Perbaikan"], ["MAK tercatat"], ["MAK Perbaikan"], ["Pagu di MAK ini", "num"]])}<tbody>${items.filter((p) => !q || b.mak.toLowerCase().includes(q) || teksPaket(p).includes(q)).map((p) => {
+        const e = p.mak_entri.filter((x) => x.mak === b.mak || x.mak_akhir === b.mak);
+        return `<tr><td>${aLink(p)}</td><td>${esc(p.nama_paket)}</td><td>${tagJenis(p.jenis_kegiatan)}</td><td>${tagJenis(p.jenis_perbaikan)}</td>
+          <td class="mono">${esc(e.map((x) => x.mak).join("; "))}</td><td class="mono">${esc(e.filter((x) => x.status === "Salah MAK").map((x) => x.mak_akhir).join("; ")) || "–"}</td>
+          <td class="num">${fmt(e.reduce((s, x) => s + x.pagu, 0))}</td></tr>`; }).join("")}</tbody></table></td></tr>` : "";
+      return `<tr class="grup" data-id="${esc(b.mak)}"><td><span class="caret">${terbuka ? "▾" : "▸"}</span><span class="mono">${esc(b.mak)}</span></td>
+        <td>${b.jenis.map(tagJenis).join(" ")}</td>
+        <td class="num">${fmt(b.tercatat_pagu)}<div class="sub">${rp.format(b.tercatat_paket)} paket</div></td>
+        <td class="num"><b>${fmt(b.seharusnya_pagu)}</b><div class="sub">${rp.format(b.seharusnya_paket)} paket</div></td>
+        <td class="num">${selisihTag(b.selisih_pagu)}${b.selisih_paket ? `<div class="sub">${b.selisih_paket > 0 ? "+" : ""}${b.selisih_paket} paket</div>` : ""}</td></tr>${rinci}`;
+    }).join("") : `<tr><td colspan="5" class="kosong">Tidak ada data.</td></tr>`) +
+    `</tbody><tfoot><tr><td colspan="2">Total</td><td class="num">${fmt(r.total_tercatat)}</td><td class="num">${fmt(r.total_seharusnya)}</td><td class="num">${selisihTag(r.total_seharusnya - r.total_tercatat)}</td></tr></tfoot>`;
+}
+
+/* ---- Jalan & Gang ---- */
+function isiLokasi(q) {
+  const f = FILTER.lokasi, L = data.lokasi;
+  const lolos = (x) => (f.kec === "Semua" || x.kecamatan.includes(f.kec)) && (f.kat === "Semua" || (x.jenis[f.kat] || 0) > 0);
+  const jenisTxt = (x) => Object.entries(x.jenis).map(([k, n]) => `<span class="tag ${k}">${k} ${n}</span>`).join(" ");
+  const paketKecil = (kodes) => `<table>${kepala([["Kode RUP"], ["Nama paket"], ["Jenis kegiatan"], ["MAK tercatat"], ["MAK Perbaikan"], ["Pagu", "num"]])}<tbody>${kodes.map(pk).map((p) => `<tr><td>${aLink(p)}</td><td>${esc(p.nama_paket)}</td>
+    <td>${tagJenis(p.jenis_kegiatan)}</td><td class="mono">${esc(p.mak_entri.map((e) => e.mak).join("; "))}</td><td class="mono">${esc(p.mak_perbaikan.join("; ")) || "–"}</td><td class="num">${fmt(p.pagu)}</td></tr>`).join("")}</tbody></table>`;
+  $("ringkasan").innerHTML = L.tidak_terbaca.length ? `<div class="ringkasan">${L.tidak_terbaca.length} paket fisik namanya tidak terbaca (nama jalan tidak ditemukan): ${esc(L.tidak_terbaca.join(", "))}</div>` : "";
+  if (f.mode === "jalan") {
+    const baris = L.jalan.filter(lolos).filter((j) => !q || j.nama.toLowerCase().includes(q) || j.kecamatan.join(" ").toLowerCase().includes(q) ||
+      j.variasi.join(" ").toLowerCase().includes(q) || L.gang.some((g) => g.jalan === j.nama && g.nama.toLowerCase().includes(q)));
+    $("hitung").textContent = `${baris.length} dari ${L.jalan.length} jalan`;
+    $("tabel").innerHTML = kepala([["Nama jalan"], ["Kecamatan"], ["Paket", "num"], ["Gang/Komp.", "num"], ["Jenis"], ["Total pagu", "num"]]) + "<tbody>" +
+      (baris.length ? baris.map((j) => {
+        const terbuka = buka.lokasi.has("j:" + j.nama) || (q && !j.nama.toLowerCase().includes(q) && !j.kecamatan.join(" ").toLowerCase().includes(q));
+        const gg = L.gang.filter((g) => g.jalan === j.nama);
+        const rinci = terbuka ? `<tr class="rinci"><td colspan="6">${j.variasi.length ? `<div class="sub" style="padding-top:8px">Ejaan lain di data: ${esc(j.variasi.join(" · "))}</div>` : ""}
+          <table>${kepala([["Gang / Komplek"], ["Tipe"], ["Paket", "num"], ["Pagu", "num"]])}<tbody>${gg.map((g) => `<tr><td>${esc(g.nama)}</td><td><span class="tag">${g.tipe}</span></td><td class="num">${g.jumlah_paket}</td><td class="num">${fmt(g.total_pagu)}</td></tr>`).join("") || `<tr><td colspan="4" class="sub">Tidak ada gang/komplek di nama paket.</td></tr>`}</tbody></table>${paketKecil(j.paket)}</td></tr>` : "";
+        return `<tr class="grup" data-id="j:${esc(j.nama)}"><td><span class="caret">${terbuka ? "▾" : "▸"}</span><b>${esc(j.nama)}</b></td><td>${esc(j.kecamatan.join(", "))}</td>
+          <td class="num">${j.jumlah_paket}</td><td class="num">${j.jumlah_gang}</td><td>${jenisTxt(j)}</td><td class="num">${fmt(j.total_pagu)}</td></tr>${rinci}`;
+      }).join("") : `<tr><td colspan="6" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
+  } else {
+    const baris = L.gang.filter(lolos).filter((g) => !q || g.nama.toLowerCase().includes(q) || g.jalan.toLowerCase().includes(q) || g.kecamatan.join(" ").toLowerCase().includes(q));
+    $("hitung").textContent = `${baris.length} dari ${L.gang.length} gang/komplek`;
+    $("tabel").innerHTML = kepala([["Nama gang / komplek"], ["Tipe"], ["Jalan"], ["Kecamatan"], ["Paket", "num"], ["Jenis"], ["Total pagu", "num"]]) + "<tbody>" +
+      (baris.length ? baris.map((g) => {
+        const id = "g:" + g.jalan + "|" + g.nama, terbuka = buka.lokasi.has(id);
+        const rinci = terbuka ? `<tr class="rinci"><td colspan="7">${paketKecil(g.paket)}</td></tr>` : "";
+        return `<tr class="grup" data-id="${esc(id)}"><td><span class="caret">${terbuka ? "▾" : "▸"}</span><b>${esc(g.nama)}</b></td><td><span class="tag">${g.tipe}</span></td>
+          <td>${esc(g.jalan)}</td><td>${esc(g.kecamatan.join(", "))}</td><td class="num">${g.jumlah_paket}</td><td>${jenisTxt(g)}</td><td class="num">${fmt(g.total_pagu)}</td></tr>${rinci}`;
+      }).join("") : `<tr><td colspan="7" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
+  }
+}
+
+/* ---- Database lengkap ---- */
+const GRUP_DETAIL = [
+  ["Paket", ["kode_rup", "jenis", "nama_paket", "penyelenggara", "metode_pemilihan", "sumber_dana", "waktu_pemilihan", "pagu"]],
+  ["Pekerjaan", ["uraian", "spesifikasi", "volume", "lokasi_pekerjaan", "jenis_pengadaan", "produk_dalam_negeri", "usaha_kecil", "pra_dipa"]],
+  ["Klasifikasi & MAK", ["kategori", "jenis_pekerjaan", "jenis_kegiatan", "status_mak", "jenis_perbaikan", "mak", "mak_perbaikan", "mak_akhir"]],
+  ["Lokasi", ["jalan", "gang", "komplek", "kecamatan", "kecamatan_asli", "kelurahan", "kelurahan_asli"]],
+  ["Jadwal", ["pemilihan_mulai", "pemilihan_akhir", "kontrak_mulai", "kontrak_akhir", "pemanfaatan_mulai", "pemanfaatan_akhir", "pelaksanaan_mulai", "pelaksanaan_akhir", "tanggal_umumkan"]],
+  ["Lainnya", ["spp_ekonomi", "spp_sosial", "spp_lingkungan", "tipe_swakelola", "penyelenggara_swakelola", "temuan", "aktif", "ada_detail", "first_seen", "last_seen", "diambil_pada"]],
+];
+function dbTersaring(q) {
+  const f = FILTER.database;
+  return DB.baris.filter((b) => {
+    if (f.aktif !== "Semua" && b.aktif !== (f.aktif === "Ya")) return false;
+    for (const k of ["kategori", "jenis_kegiatan", "jenis_pekerjaan", "status_mak", "jenis", "metode_pemilihan", "sumber_dana", "kecamatan", "kelurahan"]) if (f[k] !== "Semua" && b[k] !== f[k]) return false;
+    if (f.mak_akhir !== "Semua" && !b.mak_akhir.includes(f.mak_akhir)) return false;
+    if (f.temuan === "Ada" && !b.temuan.length) return false;
+    if (f.temuan === "Tanpa" && b.temuan.length) return false;
+    return !q || b._q.includes(q);
+  });
+}
+function isiDatabase(q) {
+  if (!DB.baris) { $("ringkasan").innerHTML = ""; $("hitung").textContent = ""; $("tabel").innerHTML = `<tbody><tr><td class="kosong">${DB.error ? "Gagal memuat: " + esc(DB.error) : "Memuat database…"}</td></tr></tbody>`; return; }
+  const label = Object.fromEntries(DB.kolom);
+  let rows = dbTersaring(q);
+  const { k, asc } = urut.database;
+  rows = rows.slice().sort((a, b) => { const x = a[k], y = b[k]; const c = typeof x === "number" ? x - y : String(gabung(x)).localeCompare(String(gabung(y))); return asc ? c : -c; });
+  const total = rows.reduce((s, b) => s + (b.pagu || 0), 0);
+  const hal = Math.min(DB.hal, Math.max(0, Math.ceil(rows.length / DB.per) - 1)); DB.hal = hal;
+  const potong = rows.slice(hal * DB.per, hal * DB.per + DB.per);
+  $("hitung").textContent = `${rp.format(rows.length)} dari ${rp.format(DB.baris.length)} paket`;
+  $("ringkasan").innerHTML = `<div class="ringkasan">Hasil filter: <b>${rp.format(rows.length)}</b> paket · total pagu <b>${fmt(total)}</b>. Klik baris untuk melihat <b>semua kolom</b> paket itu. Tombol <b>Unduh CSV</b> mengekspor hasil filter dengan semua kolom.</div>`;
+  const th = (kk, l, c) => `<th class="s ${c || ""}" data-k="${kk}">${l}${panah(kk)}</th>`;
+  $("tabel").innerHTML = `<thead><tr>${th("kode_rup", "Kode RUP")}${th("nama_paket", "Nama paket")}${th("jenis_kegiatan", "Jenis kegiatan")}${th("jalan", "Jalan")}${th("kecamatan", "Kecamatan")}${th("kelurahan", "Kelurahan")}${th("mak_akhir", "MAK seharusnya")}${th("status_mak", "Status MAK")}${th("pagu", "Pagu", "num")}</tr></thead><tbody>` +
+    (potong.length ? potong.map((b) => {
+      const terbuka = buka.database.has(b.kode_rup);
+      const rinci = terbuka ? `<tr class="rinci"><td colspan="9">${GRUP_DETAIL.map(([g, ks]) => `<div class="gtitle">${g}</div><dl class="detail">${ks.map((kk) => {
+        let v = b[kk]; v = typeof v === "boolean" ? (v ? "Ya" : "Tidak") : kk === "pagu" ? fmt(v) : gabung(v);
+        return v === "" || v === null || v === undefined ? "" : `<div><dt>${esc(label[kk] || kk)}</dt><dd>${kk === "kode_rup" ? `<a href="${esc(b.link)}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)}</dd></div>`; }).join("")}</dl>`).join("")}
+        ${b.sumber_dana_rincian.length ? `<div class="gtitle">Rincian sumber dana (MAK lengkap sesuai SiRUP)</div><table>${kepala([["Sumber dana"], ["T.A."], ["KLPD"], ["MAK lengkap"], ["Pagu", "num"]])}<tbody>${b.sumber_dana_rincian.map((s) => `<tr><td>${esc(s.sumber_dana)}</td><td>${esc(s.tahun || "")}</td><td>${esc(s.klpd || "")}</td><td class="mono">${esc(s.mak)}</td><td class="num">${fmt(s.pagu)}</td></tr>`).join("")}</tbody></table>` : ""}</td></tr>` : "";
+      return `<tr class="grup" data-id="${esc(b.kode_rup)}"><td class="mono"><span class="caret">${terbuka ? "▾" : "▸"}</span>${esc(b.kode_rup)}</td>
+        <td>${esc(b.nama_paket)}${b.aktif ? "" : ' <span class="tag">tidak aktif</span>'}${b.temuan.length ? ` <span class="tag peringatan" title="${esc(b.temuan.join(", "))}">temuan</span>` : ""}</td>
+        <td>${tagJenis(b.jenis_kegiatan)}</td><td>${esc(b.jalan || "")}${b.gang.length ? `<div class="sub">Gg. ${esc(gabung(b.gang))}</div>` : ""}</td><td>${wil(b.kecamatan, b.kecamatan_asli)}</td><td>${wil(b.kelurahan, b.kelurahan_asli)}</td>
+        <td class="mono">${esc(gabung(b.mak_akhir))}</td><td>${tagStatus(b.status_mak)}</td><td class="num">${fmt(b.pagu)}</td></tr>${rinci}`;
+    }).join("") : `<tr><td colspan="9" class="kosong">Tidak ada data untuk filter ini.</td></tr>`) + "</tbody>";
+  const hm = Math.max(1, Math.ceil(rows.length / DB.per));
+  $("halaman").innerHTML = `<div class="halaman"><span class="sub">Halaman ${hal + 1} dari ${hm}</span><span style="display:flex;gap:8px;align-items:center">
+    <button class="btn" data-hal="-1" ${hal === 0 ? "disabled" : ""}>‹ Sebelumnya</button><button class="btn" data-hal="1" ${hal >= hm - 1 ? "disabled" : ""}>Berikutnya ›</button>
+    <label class="flab">Per halaman<select id="perhal">${[25, 50, 100, 250].map((n) => `<option ${n === DB.per ? "selected" : ""}>${n}</option>`).join("")}</select></label></span></div>`;
+}
+
+/* ---- Pemeriksaan ---- */
 function isiPeriksa(q) {
-  const pr = data.periksa;
-  const chips = Object.entries(pr.ringkas).map(([k2, r]) => `<button class="chip ${r.tingkat === "kesalahan" ? "err" : "peringatan"} ${k2 === jenisTemuan ? "aktif" : ""}" data-jenistemuan="${k2}">
+  const pr = data.periksa, f = FILTER.periksa;
+  const chips = Object.entries(pr.ringkas).map(([k, r]) => `<button class="chip ${r.tingkat === "kesalahan" ? "err" : "peringatan"} ${k === f.jenis ? "aktif" : ""}" data-jenistemuan="${k}">
     <small>${r.tingkat === "kesalahan" ? "Kesalahan" : "Peringatan"}</small><b>${esc(r.judul)}</b><small>${rp.format(r.jumlah)} paket · ${ringkas(r.pagu)}</small></button>`).join("");
   let mx = "";
   if (pr.matriks) {
-    const m = pr.matriks, cell = (b, kol) => {
-      const c = m.nilai[b][kol], salah = kol !== "Belum dipetakan" && kol !== b && c.paket > 0, belum = kol === "Belum dipetakan" && c.paket > 0;
-      return `<td class="num ${salah ? "salah" : belum ? "belum" : ""}">${c.paket ? fmt(c.pagu) + `<div class="sub">${rp.format(c.paket)} paket</div>` : "–"}</td>`;
-    };
-    mx = `<table class="matriks"><caption>Rekonsiliasi: kategori paket (dari nama/uraian) × jenis MAK yang dipakai (dari pemetaan di config). Sel merah = kategori dan MAK tidak cocok.</caption>
+    const m = pr.matriks, cell = (b, kol) => { const c = m.nilai[b][kol], salah = kol !== "Belum dipetakan" && kol !== b && c.paket > 0, belum = kol === "Belum dipetakan" && c.paket > 0;
+      return `<td class="num ${salah ? "salah" : belum ? "belum" : ""}">${c.paket ? fmt(c.pagu) + `<div class="sub">${rp.format(c.paket)} paket</div>` : "–"}</td>`; };
+    mx = `<table class="matriks"><caption>Rekonsiliasi: kategori paket (dari nama/uraian) × jenis MAK yang dipakai (dari pemetaan di config). Sel merah = tidak cocok.</caption>
       <thead><tr><th>Kategori paket ↓ / MAK →</th>${m.kolom.map((kol) => `<th class="num">${kol === "Belum dipetakan" ? "MAK belum dipetakan" : "MAK " + esc(kol)}</th>`).join("")}</tr></thead>
       <tbody>${m.baris.map((b) => `<tr><td><b>${esc(b)}</b></td>${m.kolom.map((kol) => cell(b, kol)).join("")}</tr>`).join("")}</tbody></table>`;
   }
-  const items = pr.temuan.filter((t) => (tingkatFilter === "Semua" || t.tingkat === tingkatFilter) &&
-    (jenisTemuan === "Semua" || t.jenis === jenisTemuan) &&
+  const items = pr.temuan.filter((t) => (f.tingkat === "Semua" || t.tingkat === f.tingkat) && (f.jenis === "Semua" || t.jenis === f.jenis) &&
     (!q || t.nama_paket.toLowerCase().includes(q) || t.kode_rup.includes(q) || t.pesan.toLowerCase().includes(q)));
   $("hitung").textContent = `${items.length} temuan`;
   $("ringkasan").innerHTML = (chips ? `<div class="chips">${chips}</div>` : `<div class="ringkasan">Tidak ada temuan.</div>`) + mx;
-  $("tabel").innerHTML = `<thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Temuan</th><th>Kategori</th><th class="num">Pagu terkait</th></tr></thead><tbody>` +
-    (items.length ? items.map((t) => `<tr>
-      <td class="mono"><a href="${esc(t.link)}" target="_blank" rel="noopener">${esc(t.kode_rup)}</a></td>
-      <td>${esc(t.nama_paket)}</td>
-      <td><span class="tag ${t.tingkat}">${esc(t.judul)}</span><div class="sub">${esc(t.pesan)}</div></td>
-      <td>${tagKat(t)}</td><td class="num">${fmt(t.pagu)}</td></tr>`).join("") : `<tr><td colspan="5" class="kosong">Tidak ada temuan untuk filter ini.</td></tr>`) + "</tbody>";
+  $("tabel").innerHTML = kepala([["Kode RUP"], ["Nama paket"], ["Temuan"], ["Kategori"], ["Pagu terkait", "num"]]) + "<tbody>" +
+    (items.length ? items.map((t) => `<tr><td><a class="mono" href="${esc(t.link)}" target="_blank" rel="noopener">${esc(t.kode_rup)}</a></td><td>${esc(t.nama_paket)}</td>
+      <td><span class="tag ${t.tingkat}">${esc(t.judul)}</span><div class="sub">${esc(t.pesan)}</div></td><td>${tagJenis(t.kategori)}</td><td class="num">${fmt(t.pagu)}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="kosong">Tidak ada temuan untuk filter ini.</td></tr>`) + "</tbody>";
 }
-function localStorage_tab() { simpan("rekap_tab", tab); simpan("rekap_kat", kat); }
 
-/* ---------- interaksi ---------- */
-document.addEventListener("click", (e) => {
-  const c = e.target.closest("[data-kat]");
-  if (c) { kat = c.dataset.kat; tab = "kategori"; gambar(); return; }
-  const t = e.target.closest("[data-tab]");
-  if (t) { tab = t.dataset.tab; gambar(); return; }
-  const ti = e.target.closest("[data-tingkat]");
-  if (ti) { tingkatFilter = ti.dataset.tingkat; isiPeralatan(); isiTabel(); return; }
-  const jt = e.target.closest("[data-jenistemuan]");
-  if (jt) { jenisTemuan = jenisTemuan === jt.dataset.jenistemuan ? "Semua" : jt.dataset.jenistemuan; isiPeralatan(); isiTabel(); return; }
-  const j = e.target.closest("[data-jenis]");
-  if (j) { jenisFilter = j.dataset.jenis; isiPeralatan(); isiTabel(); return; }
-  const th = e.target.closest("th[data-k]");
-  if (th && tab !== "kategori" && tab !== "periksa") {
-    const k = th.dataset.k, u = urut[tab];
-    urut[tab] = { k, asc: u.k === k ? !u.asc : (k === "mak" || k === "uraian") };
-    isiTabel(); return;
-  }
-  const tr = e.target.closest("tr.grup");
-  if (tr && !e.target.closest("a")) {
-    const id = tr.dataset.id;
-    buka[tab].has(id) ? buka[tab].delete(id) : buka[tab].add(id);
-    isiTabel();
-  }
-});
+/* ======================= unduh CSV ======================= */
 $("unduh").addEventListener("click", () => {
   if (!data) return;
   const c = (s) => '"' + String(s ?? "").replace(/"/g, '""') + '"';
-  let baris, nama;
-  if (tab === "periksa") {
-    nama = "temuan_pemeriksaan.csv";
-    baris = [["tingkat", "jenis", "kode_rup", "nama_paket", "pesan", "pagu_terkait", "link"].join(",")].concat(
-      data.periksa.temuan.map((t) => [t.tingkat, t.jenis, t.kode_rup, c(t.nama_paket), c(t.pesan), t.pagu, t.link].join(",")));
+  const q = $("cari").value.trim().toLowerCase();
+  let baris = [], nama = "rekap.csv";
+  if (tab === "database" && DB.baris) {
+    nama = "database_paket.csv";
+    baris = [DB.kolom.map(([, l]) => c(l)).join(",")].concat(dbTersaring(q).map((b) => DB.kolom.map(([k]) => c(typeof b[k] === "boolean" ? (b[k] ? "Ya" : "Tidak") : gabung(b[k]))).join(",")));
   } else if (tab === "kategori") {
-    nama = "rekap_" + kat.toLowerCase() + ".csv";
-    baris = [["kode_rup", "nama_paket", "kategori", "jenis_pekerjaan", "uraian", "pagu", "link"].join(",")].concat(
-      data.klasifikasi[kat].paket.map((k) => data.paket[k]).filter((p) => jenisFilter === "Semua" || p.jenis_pekerjaan === jenisFilter)
-        .map((p) => [p.kode_rup, c(p.nama_paket), p.kategori, p.jenis_pekerjaan, c(p.uraian), p.pagu, p.link].join(",")));
+    const f = FILTER.kategori; nama = `rekap_${f.kat.toLowerCase()}${f.mak !== "Semua" ? "_mak_perbaikan" : ""}.csv`;
+    baris = [["kode_rup", "nama_paket", "jalan", "gang", "kecamatan", "jenis_kegiatan", "mak_tercatat", "mak_perbaikan", "jenis_perbaikan", "pagu", "link"].join(",")].concat(
+      itemsKategori(false).filter((p) => !q || teksPaket(p).includes(q)).map((p) => [p.kode_rup, c(p.nama_paket), c(p.jalan), c(gabung(p.gang)), c(p.kecamatan), c(p.jenis_kegiatan),
+        c(p.mak_entri.map((e) => e.mak).join("; ")), c(gabung(p.mak_perbaikan)), c(p.jenis_perbaikan), p.pagu, p.link].join(",")));
+  } else if (tab === "perbaikan") {
+    nama = `rekap_perbaikan_mak_${FILTER.perbaikan.jp.toLowerCase()}.csv`;
+    baris = [["mak", "jenis", "tercatat_pagu", "tercatat_paket", "seharusnya_pagu", "seharusnya_paket", "selisih_pagu"].join(",")].concat(
+      data.perbaikan[FILTER.perbaikan.jp].mak.map((b) => [c(b.mak), c(b.jenis.join("; ")), b.tercatat_pagu, b.tercatat_paket, b.seharusnya_pagu, b.seharusnya_paket, b.selisih_pagu].join(",")));
+  } else if (tab === "lokasi") {
+    const f = FILTER.lokasi, L = data.lokasi, ok = (x) => (f.kec === "Semua" || x.kecamatan.includes(f.kec)) && (f.kat === "Semua" || (x.jenis[f.kat] || 0) > 0);
+    if (f.mode === "jalan") { nama = "database_nama_jalan.csv";
+      baris = [["nama_jalan", "kecamatan", "jumlah_paket", "jumlah_gang", "total_pagu", "ejaan_lain"].join(",")].concat(L.jalan.filter(ok).map((j) => [c(j.nama), c(j.kecamatan.join("; ")), j.jumlah_paket, j.jumlah_gang, j.total_pagu, c(j.variasi.join("; "))].join(",")));
+    } else { nama = "database_nama_gang.csv";
+      baris = [["nama_gang", "tipe", "jalan", "kecamatan", "jumlah_paket", "total_pagu", "ejaan_lain"].join(",")].concat(L.gang.filter(ok).map((g) => [c(g.nama), g.tipe, c(g.jalan), c(g.kecamatan.join("; ")), g.jumlah_paket, g.total_pagu, c(g.variasi.join("; "))].join(",")));
+    }
+  } else if (tab === "periksa") {
+    nama = "temuan_pemeriksaan.csv";
+    baris = [["tingkat", "jenis", "kode_rup", "nama_paket", "pesan", "pagu_terkait", "link"].join(",")].concat(data.periksa.temuan.map((t) => [t.tingkat, t.jenis, t.kode_rup, c(t.nama_paket), c(t.pesan), t.pagu, t.link].join(",")));
   } else {
-    const kunci = tab === "mak" ? "mak" : "uraian", src = tab === "mak" ? data.per_mak : data.per_uraian;
-    nama = "rekap_per_" + kunci + ".csv";
+    const kunci = tab === "mak" ? "mak" : "uraian", src = tab === "mak" ? data.per_mak : data.per_uraian; nama = "rekap_per_" + kunci + ".csv";
     baris = [[kunci, "jumlah_paket", "total_pagu"].join(",")].concat(src.map((g) => [c(g[kunci]), g.jumlah_paket, g.total_pagu].join(",")));
   }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
-  a.download = nama;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  a.download = nama; a.click(); URL.revokeObjectURL(a.href);
 });
 
 aturTimer();
