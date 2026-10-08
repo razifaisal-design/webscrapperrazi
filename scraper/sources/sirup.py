@@ -1,4 +1,5 @@
 """Sumber SiRUP (sirup.inaproc.id): daftar RUP per satuan kerja, penyedia + swakelola."""
+from ..core import dana
 from ..core.money import parse_rupiah
 
 BASE = "https://sirup.inaproc.id/sirup"
@@ -20,11 +21,11 @@ def parse_baris(jenis, baris, target):
     """Satu baris aaData -> dict paket. Fungsi murni (mudah dites)."""
     if jenis == "penyedia":
         # [id, nama, pagu, metode, sumber_dana, kode_rup, waktu]
-        kode, nama, pagu, metode, dana, _kode2, waktu = baris[:7]
+        kode, nama, pagu, metode, dana_mentah, _kode2, waktu = baris[:7]
         penyelenggara = None
     else:
         # [id, penyelenggara, nama, pagu, sumber_dana, kode_rup, waktu]
-        kode, penyelenggara, nama, pagu, dana, _kode2, waktu = baris[:7]
+        kode, penyelenggara, nama, pagu, dana_mentah, _kode2, waktu = baris[:7]
         metode = "Swakelola"
     kode = str(kode).strip()
     if not kode.isdigit():
@@ -39,7 +40,7 @@ def parse_baris(jenis, baris, target):
         "penyelenggara": penyelenggara,
         "pagu": parse_rupiah(pagu),
         "metode_pemilihan": " ".join(str(metode).split()),
-        "sumber_dana": str(dana).strip(),
+        "sumber_dana": dana.kanon(dana_mentah),
         "waktu_pemilihan": str(waktu).strip(),
         "link": link_paket(jenis, kode),
     }

@@ -166,12 +166,23 @@
       </select>
       <span class="sub" id="jobTeks"></span>
       <a class="btn" href="/grafik" target="_blank" rel="noopener" style="text-decoration:none">Grafik ↗</a>
+      <button class="btn" id="bukaExcel">Unduh Excel…</button>
       <button class="btn" id="bukaAmbil">Ambil data…</button>
       <button class="btn" id="muat">Muat ulang</button>
       <button class="btn" id="unduh">Unduh CSV</button>
     </div>
   </header>
 
+  <section class="ambil" id="excel" hidden aria-label="Unduh database ke Excel">
+    <div class="agrid">
+      <label>Tahun<select id="x-tahun"></select></label>
+      <label style="justify-content:flex-end"><span style="display:flex;gap:6px;align-items:center;color:var(--text)"><input type="checkbox" id="x-nonaktif"> Sertakan paket tidak aktif (RUP lama yang sudah diganti)</span></label>
+    </div>
+    <div class="aksi">
+      <a class="btn utama" id="x-unduh" href="#" style="text-decoration:none">Unduh Excel (.xlsx)</a>
+      <span class="sub" id="x-ket"></span>
+    </div>
+  </section>
   <section class="ambil" id="ambil" hidden aria-label="Ambil data dari SiRUP">
     <div class="agrid">
       <label>Tahun anggaran<select id="a-tahun"></select></label>
@@ -826,6 +837,24 @@ $("unduh").addEventListener("click", () => {
   a.href = URL.createObjectURL(new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
   a.download = nama; a.click(); URL.revokeObjectURL(a.href);
 });
+
+/* ======================= Unduh Excel ======================= */
+function isiTahunExcel() {
+  if (!data) return;
+  const pilih = $("x-tahun").value || (semuaTahun() ? "semua" : String(data.target.tahun));
+  const th = data.tahun_tersedia.map(String).sort();
+  $("x-tahun").innerHTML = `<option value="semua" ${pilih === "semua" ? "selected" : ""}>Semua tahun (sheet gabungan + satu sheet per tahun)</option>` +
+    th.map((y) => `<option value="${y}" ${pilih === y ? "selected" : ""}>${y}</option>`).join("");
+  perbaruiTautanExcel();
+}
+function perbaruiTautanExcel() {
+  const th = $("x-tahun").value || "semua";
+  $("x-unduh").href = `/api/excel?tahun=${encodeURIComponent(th)}&tidak_aktif=${$("x-nonaktif").checked ? 1 : 0}`;
+  $("x-ket").textContent = "Kolom: Nomor, RUP, Nama paket, Jenis kegiatan, Jalan, Gang, Kecamatan, Kelurahan, MAK asli, Status MAK, Ada perubahan RUP, Pemeriksaan, Pagu.";
+}
+$("bukaExcel").addEventListener("click", () => { const p = $("excel"); p.hidden = !p.hidden; if (!p.hidden) isiTahunExcel(); });
+$("x-tahun").addEventListener("change", perbaruiTautanExcel);
+$("x-nonaktif").addEventListener("change", perbaruiTautanExcel);
 
 /* ======================= Ambil data (jalankan pekerjaan dari dashboard) ======================= */
 const AMBIL = { poll: null, status: "idle", t: null };

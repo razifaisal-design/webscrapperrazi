@@ -68,6 +68,18 @@ class TestMakKategori(unittest.TestCase):
         self.assertEqual(n["Saluran"]["Saluran"], {"pagu": 60, "paket": 1})
 
 
+class TestSumberDanaCampuran(unittest.TestCase):
+    def test_rincian_campuran_diperingatkan_dan_satu_nilai_tidak(self):
+        a = p("1", "Jalan", [(J, 100)])
+        a.update(dana=["APBD", "APBDP"], sumber_dana="APBD")
+        b = p("2", "Jalan", [(J, 100)])
+        b.update(dana=["APBD"], sumber_dana="APBD")
+        h = hitung(a, b)
+        self.assertEqual(jenis(h), [("SUMBER_DANA_CAMPURAN", "1")])
+        self.assertEqual(h["temuan"][0]["tingkat"], "peringatan")
+        self.assertIn("APBD dan APBDP", h["temuan"][0]["pesan"])
+
+
 class TestCekLain(unittest.TestCase):
     def test_nama_dan_uraian_bertentangan(self):
         h = hitung(p("1", "Jalan", [(J, 100)], nama="Pengawasan PSU Jalan Tahun 2026", uraian="Pengawasan Saluran"))

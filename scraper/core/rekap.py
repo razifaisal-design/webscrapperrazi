@@ -2,6 +2,7 @@
 Pagu dijumlahkan per MAK, per Uraian, dan (bila ada aturan) per kategori Jalan/Saluran."""
 import json
 
+from . import dana
 from .klasifikasi import FISIK, KONSULTAN, LAINNYA, Pengklasifikasi
 from .mak import SEGMEN_DEFAULT, TANPA_MAK, norm_mak
 
@@ -79,6 +80,7 @@ def rekap_mak(conn, id_satker, tahun, aturan=None, mak_segmen=SEGMEN_DEFAULT):
         kategori, jenis_kerja = klas(r["nama_paket"], uraian) if klas else (None, None)
         paket[r["kode_rup"]] = {
             "tahun": tahun, "kode_rup": r["kode_rup"], "nama_paket": r["nama_paket"], "jenis": r["jenis"], "link": r["link"],
+            "sumber_dana": dana.dominan(rincian)[0], "dana": dana.dominan(rincian)[1],
             "uraian": uraian, "volume": r["volume"], "pagu": pagu_detail, "pagu_daftar": r["pagu"], "mak": [],
             "kategori": kategori, "jenis_pekerjaan": jenis_kerja}
 

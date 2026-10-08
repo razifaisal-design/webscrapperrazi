@@ -1,5 +1,6 @@
 """Dashboard lokal (hanya 127.0.0.1):  python -m scraper web [--port 8765]"""
 import collections
+import datetime
 import json
 import sqlite3
 import threading
@@ -11,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import tugas as _tugas
 from .cli import TARGETS, muat_target
-from .core import database, db, lokasi, rekap, semua_tahun, statistik
+from .core import database, db, excel, lokasi, rekap, semua_tahun, statistik
 from .core.klasifikasi import AturanError
 
 HTML = Path(__file__).with_name("dashboard.html")
@@ -237,6 +238,39 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             except SystemExit as e:
                 return self._json(400, {"error": str(e)})
 
+        def _excel(self, q, th):
+            """Unduh database ke Excel: semua tahun (satu sheet gabungan + satu sheet per tahun) atau satu tahun terpilih."""
+            try:
+                tidak_aktif = q.get("tidak_aktif", ["0"])[0] == "1"
+                conn = buka_readonly(db_path)
+                try:
+                    if th == "semua":
+                        pasangan = semua_dari_db(conn, tahun_default)
+                    else:
+                        _, t = muat_target(None, th)
+                        pasangan = [(t, rekap.lengkap(conn, t))]
+                    per_tahun = {}
+                    for t, d in pasangan:
+                        rows = database.baris(conn, t, d)
+                        per_tahun[t["tahun"]] = rows if tidak_aktif else [r for r in rows if r["aktif"]]
+                finally:
+                    conn.close()
+                if not per_tahun or not any(per_tahun.values()):
+                    return self._json(404, {"error": "Tidak ada data untuk tahun yang dipilih."})
+                isi = excel.buat_xlsx(per_tahun, gabungan=(th == "semua"))
+                nama = f"database_RUP_{'semua-tahun' if th == 'semua' else th}_{datetime.datetime.now():%Y-%m-%d_%Hh%M}.xlsx"
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                self.send_header("Content-Disposition", f'attachment; filename="{nama}"')
+                self.send_header("Content-Length", str(len(isi)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(isi)
+            except sqlite3.Error as e:
+                self._json(500, {"error": f"Database belum siap: {e}"})
+            except (AturanError, SystemExit) as e:
+                self._json(500, {"error": str(e)})
+
         def do_GET(self):
             u = urlparse(self.path)
             if not host_sah(self):
@@ -250,6 +284,8 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
                 return self._kirim(200, "text/html; charset=utf-8", HTML_GRAFIK.read_bytes())
             if u.path == "/api/tugas":
                 return self._json(200, tugas.status())
+            if u.path == "/api/excel":
+                return self._excel(q, th)
             if u.path == "/api/statistik":
                 def hitung(conn):
                     _, dasar = muat_target(None, tahun_default)

@@ -33,9 +33,10 @@ def _gabung(v):
 def baris(conn, target, data):
     """List dict datar (list tetap list agar UI bisa memakainya). `data` = hasil rekap.lengkap()."""
     turunan = data["paket"]
-    temuan = {}
+    temuan, temuan_rinci = {}, {}
     for t in data["periksa"]["temuan"]:
         temuan.setdefault(t["kode_rup"], []).append(t["judul"])
+        temuan_rinci.setdefault(t["kode_rup"], []).append([t["tingkat"], t["judul"], t["pesan"]])
     rows = conn.execute(
         "SELECT p.*, d.lokasi_ringkas, d.volume, d.uraian AS d_uraian, d.spesifikasi, d.sumber_dana_json, "
         "d.extra_json, d.diambil_pada, d.kode_rup AS ada_detail FROM sirup_paket p "
@@ -48,7 +49,8 @@ def baris(conn, target, data):
         b = {
             "tahun": r["tahun"], "kode_rup": r["kode_rup"], "link": r["link"], "jenis": r["jenis"],
             "nama_paket": html.unescape(r["nama_paket"] or ""), "penyelenggara": r["penyelenggara"],
-            "pagu": r["pagu"], "metode_pemilihan": r["metode_pemilihan"], "sumber_dana": r["sumber_dana"],
+            "pagu": r["pagu"], "metode_pemilihan": r["metode_pemilihan"],
+            "sumber_dana": t.get("sumber_dana") or r["sumber_dana"],
             "waktu_pemilihan": r["waktu_pemilihan"], "uraian": t.get("uraian") or r["d_uraian"],
             "spesifikasi": r["spesifikasi"], "volume": r["volume"], "lokasi_pekerjaan": r["lokasi_ringkas"],
             "mak": [e["mak"] for e in t.get("mak_entri", [])],
@@ -58,7 +60,7 @@ def baris(conn, target, data):
             "mak_akhir": t.get("mak_akhir", []), "jalan": t.get("jalan"), "gang": t.get("gang", []),
             "komplek": t.get("komplek", []), "kecamatan": t.get("kecamatan"), "kelurahan": t.get("kelurahan"),
             "kecamatan_asli": t.get("kecamatan_asli"), "kelurahan_asli": t.get("kelurahan_asli"),
-            "temuan": temuan.get(r["kode_rup"], []),
+            "temuan": temuan.get(r["kode_rup"], []), "temuan_rinci": temuan_rinci.get(r["kode_rup"], []),
             "kode_rup_sebelumnya": r["kode_rup_sebelumnya"], "kode_rup_pengganti": r["kode_rup_pengganti"],
             "aktif": bool(r["is_active"]), "first_seen": r["first_seen"], "last_seen": r["last_seen"],
             "diambil_pada": r["diambil_pada"], "ada_detail": r["ada_detail"] is not None,

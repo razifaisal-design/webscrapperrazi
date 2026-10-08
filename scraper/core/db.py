@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from . import dana
 from .mak import mak_inti
 
 DB_DEFAULT = Path(__file__).resolve().parents[2] / "data" / "pantau.db"
@@ -66,6 +67,10 @@ def buka(path=DB_DEFAULT):
     for kol in ("kode_rup_sebelumnya", "kode_rup_pengganti"):     # database lama: tambah kolom
         if kol not in ada:
             conn.execute(f"ALTER TABLE sirup_paket ADD COLUMN {kol} TEXT")
+    # sumber dana lama berbentuk 'APBD, APBD, APBD' -> satu nilai (APBD / APBDP)
+    with conn:
+        for (nilai,) in conn.execute("SELECT DISTINCT sumber_dana FROM sirup_paket WHERE sumber_dana LIKE '%,%'").fetchall():
+            conn.execute("UPDATE sirup_paket SET sumber_dana=? WHERE sumber_dana=?", (dana.kanon(nilai), nilai))
     # tampilan gabungan daftar + detail, lengkap dengan kolom TAHUN (sirup_detail sendiri tidak punya kolom tahun)
     conn.executescript("DROP VIEW IF EXISTS v_paket_detail;" + VIEW_PAKET_DETAIL)
     return conn

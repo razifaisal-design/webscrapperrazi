@@ -19,6 +19,7 @@ JUDUL = {
     "SATUAN_BERTENTANGAN": "Satuan volume bertentangan",
     "PAGU_TIDAK_SAMA": "Pagu detail ≠ pagu daftar",
     "KEMUNGKINAN_GANDA": "Kemungkinan paket ganda",
+    "SUMBER_DANA_CAMPURAN": "Sumber dana campuran (APBD + APBDP)",
     "KECAMATAN_SALAH_EJA": "Salah eja kecamatan",
     "KECAMATAN_TIDAK_DIKENAL": "Kecamatan tidak dikenal",
     "KECAMATAN_TIDAK_ADA": "Kecamatan tidak tertulis",
@@ -106,6 +107,11 @@ def jalankan(data, aturan=None):
         # 3b. kesalahan input kecamatan / kelurahan (dibandingkan dengan daftar wilayah resmi)
         for m in p.get("lokasi_masalah", []):
             tambah(p, m["tingkat"], m["jenis"], m["pesan"])
+
+        # 3c. rincian memakai lebih dari satu sumber dana: dihitung sebagai yang terbesar, tetapi dilaporkan
+        if len(p.get("dana") or []) > 1:
+            tambah(p, "peringatan", "SUMBER_DANA_CAMPURAN",
+                   f"Rincian memakai {' dan '.join(p['dana'])}; di rekap dihitung sebagai {p['sumber_dana']} (pagu terbesar)")
 
         # 4. pagu detail harus sama dengan pagu di daftar SiRUP
         if abs((p["pagu"] or 0) - (p["pagu_daftar"] or 0)) >= 0.5:
