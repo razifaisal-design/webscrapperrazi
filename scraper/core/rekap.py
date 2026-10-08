@@ -122,6 +122,10 @@ def lengkap(conn, target):
     # penanda 'data berubah' untuk auto-refresh halaman Database
     v = conn.execute("SELECT MAX(last_seen), COUNT(*) FROM sirup_paket WHERE id_satker=? AND tahun=?",
                      (target["id_satker"], target["tahun"])).fetchone()
+    ev = dict(conn.execute(
+        "SELECT e.jenis_event, COUNT(*) FROM paket_events e JOIN sirup_paket p ON p.kode_rup=e.kunci "
+        "WHERE p.id_satker=? AND p.tahun=? GROUP BY e.jenis_event", (target["id_satker"], target["tahun"])).fetchall())
+    data["perubahan"] = {"revisi": ev.get("REVISI_RUP", 0), "total": sum(ev.values()), "per_jenis": ev}
     data["tahun_tersedia"] = sorted({r[0] for r in conn.execute(
         "SELECT DISTINCT tahun FROM sirup_paket WHERE id_satker=?", (target["id_satker"],))} | {target["tahun"]})
     data["versi"] = f"{v[0]}|{v[1]}|{data['paket_dengan_detail']}|{data['detail_terakhir_diambil']}"

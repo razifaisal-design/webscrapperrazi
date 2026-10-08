@@ -55,11 +55,40 @@ class TestFinalisasi(unittest.TestCase):
         jalankan(self.conn, [pk("1"), pk("2")])
         self.assertIn("MUNCUL_KEMBALI", [e[0] for e in self.events()])
 
-    def test_kemungkinan_revisi_kode_rup_berganti(self):
-        jalankan(self.conn, [pk("1", "Jalan A"), pk("9", "Lain")])
-        jalankan(self.conn, [pk("2", "Jalan  A"), pk("9", "Lain")])
-        revisi = [e for e in self.events() if e[0] == "KEMUNGKINAN_REVISI"]
-        self.assertEqual(revisi, [("KEMUNGKINAN_REVISI", "2", "kode_rup", "1", "2", None)])
+    def test_revisi_rup_nama_sama_kode_berganti(self):
+        jalankan(self.conn, [pk("1", "Jalan A", 100), pk("9", "Lain")])
+        jalankan(self.conn, [pk("2", "Jalan  A", 120), pk("9", "Lain")])        # spasi beda tidak masalah
+        self.assertEqual(self.events(), [("REVISI_RUP", "2", "kode_rup", "1", "2", 20)])   # satu event, bukan BARU+HILANG
+        baris = {r["kode_rup"]: r for r in self.conn.execute("SELECT * FROM sirup_paket")}
+        self.assertEqual((baris["2"]["kode_rup_sebelumnya"], baris["1"]["kode_rup_pengganti"]), ("1", "2"))
+        self.assertEqual(baris["1"]["is_active"], 0)
+
+    def test_beberapa_nama_sama_dipasangkan_menurut_pagu_terdekat(self):
+        jalankan(self.conn, [pk("1", "Fotocopy", 10), pk("2", "Fotocopy", 500)])
+        jalankan(self.conn, [pk("3", "Fotocopy", 505), pk("4", "Fotocopy", 11)])
+        pasang = {(e[3], e[4]) for e in self.events() if e[0] == "REVISI_RUP"}
+        self.assertEqual(pasang, {("2", "3"), ("1", "4")})
+
+    def test_nama_beda_tetap_baru_dan_hilang(self):
+        jalankan(self.conn, [pk("1", "A"), pk("2", "B")])
+        jalankan(self.conn, [pk("2", "B"), pk("3", "C")])
+        self.assertEqual(sorted(e[0] for e in self.events()), ["BARU", "HILANG"])
+
+    def test_kelebihan_baru_atau_hilang_tidak_dipaksa_berpasangan(self):
+        jalankan(self.conn, [pk("1", "X")])
+        jalankan(self.conn, [pk("2", "X"), pk("3", "X")])                       # 1 hilang, 2 baru dengan nama sama
+        jenis = sorted(e[0] for e in self.events())
+        self.assertEqual(jenis, ["BARU", "REVISI_RUP"])
+
+    def test_migrasi_database_lama_tanpa_kolom_tautan(self):
+        import sqlite3, tempfile, os
+        d = tempfile.mkdtemp(); f = os.path.join(d, "lama.db")
+        c = sqlite3.connect(f)
+        c.execute("CREATE TABLE sirup_paket (kode_rup TEXT PRIMARY KEY, tahun INTEGER, klpd_nama TEXT, id_satker INTEGER, jenis TEXT, nama_paket TEXT, penyelenggara TEXT, pagu NUMERIC, metode_pemilihan TEXT, sumber_dana TEXT, waktu_pemilihan TEXT, link TEXT, first_seen TEXT, last_seen TEXT, is_active INTEGER DEFAULT 1, last_run_id INTEGER)")
+        c.commit(); c.close()
+        conn = db.buka(f)
+        self.addCleanup(conn.close)
+        self.assertIn("kode_rup_sebelumnya", {r[1] for r in conn.execute("PRAGMA table_info(sirup_paket)")})
 
 
 class TestValidasi(unittest.TestCase):

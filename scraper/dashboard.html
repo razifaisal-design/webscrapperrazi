@@ -117,6 +117,30 @@
   dl.detail div { min-width: 0; }
   dl.detail dt { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
   dl.detail dd { margin: 0; word-break: break-word; }
+  .tag.revisi { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .pb { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .pb-atas { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .pb-angka { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .pb-bar { position: relative; height: 18px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 8px 0 6px; }
+  .pb-bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width .5s ease; }
+  .pb-bar.penuh > i { background: var(--ok); }
+  .pb-bar.jalan > i { background-image: linear-gradient(45deg, rgba(255,255,255,.28) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.28) 75%, transparent 75%);
+                      background-size: 24px 24px; animation: gerak 1s linear infinite; }
+  @keyframes gerak { to { background-position: 24px 0; } }
+  .pb-persen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 650; color: var(--text); mix-blend-mode: normal; text-shadow: 0 0 3px var(--card); }
+  .ambil { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+  .ambil[hidden] { display: none; }
+  .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
+  .agrid label { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12px; }
+  .agrid select { width: 100%; }
+  .aksi { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  .btn.utama { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.bahaya { border-color: var(--err); color: var(--err); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .laju { font-size: 12.5px; margin-top: 10px; }
+  .laju.tinggi { color: var(--err); font-weight: 600; } .laju.sedang { color: var(--warn); }
+  pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 10px 0 0; max-height: 190px;
+            overflow: auto; font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; }
   .gtitle { font-weight: 650; margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
   .gtitle:first-child { border-top: none; padding-top: 0; }
 </style>
@@ -134,14 +158,37 @@
       <select id="tahun" aria-label="Tahun anggaran"></select>
       <label class="sub" for="interval">Auto-refresh</label>
       <select id="interval" aria-label="Interval auto-refresh">
-        <option value="0">Mati</option><option value="5">5 detik</option><option value="10">10 detik</option>
+        <option value="0">Mati</option><option value="2">2 detik</option><option value="5">5 detik</option><option value="10">10 detik</option>
         <option value="30">30 detik</option><option value="60">1 menit</option><option value="300">5 menit</option>
       </select>
+      <span class="sub" id="jobTeks"></span>
+      <button class="btn" id="bukaAmbil">Ambil data…</button>
       <button class="btn" id="muat">Muat ulang</button>
       <button class="btn" id="unduh">Unduh CSV</button>
     </div>
   </header>
 
+  <section class="ambil" id="ambil" hidden aria-label="Ambil data dari SiRUP">
+    <div class="agrid">
+      <label>Tahun anggaran<select id="a-tahun"></select></label>
+      <label>Jumlah koneksi (detail)<select id="a-koneksi"><option>1</option><option>2</option><option>3</option><option>5</option></select></label>
+      <label>Jeda tiap koneksi<select id="a-jeda"><option value="0.5">0,5 detik</option><option value="1">1 detik</option><option value="1.5" selected>1,5 detik</option><option value="2">2 detik</option><option value="3">3 detik</option></select></label>
+      <label>Ambil ulang detail yang lebih tua dari<select id="a-usia"><option value="1">1 hari</option><option value="3">3 hari</option><option value="7" selected>7 hari</option><option value="30">30 hari</option><option value="0">Tidak (hanya yang pagu/namanya berubah)</option></select></label>
+      <label style="justify-content:flex-end"><span style="display:flex;gap:6px;align-items:center;color:var(--text)"><input type="checkbox" id="a-semua"> Paksa ambil ulang semua detail</span></label>
+    </div>
+    <div class="laju" id="a-laju"></div>
+    <div class="aksi">
+      <button class="btn utama" id="a-mulai">Ambil Data + Detail</button>
+      <button class="btn bahaya" id="a-henti" disabled>Hentikan</button>
+      <span class="sub">Satu proses: tahap 1 daftar RUP (tahu paket baru / revisi RUP), tahap 2 detail paket, lalu database Jalan &amp; Gang. Daftar selalu 1 koneksi; koneksi di atas untuk detail.</span>
+    </div>
+    <div id="a-status"></div>
+  </section>
+  <div class="pb" id="pb" aria-live="polite">
+    <div class="pb-atas"><span><b>Paket yang sudah diambil detailnya</b></span><span class="pb-angka" id="pb-angka">…</span></div>
+    <div class="pb-bar" id="pb-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i id="pb-isi"></i><span class="pb-persen" id="pb-persen"></span></div>
+    <div class="sub" id="pb-ket"></div>
+  </div>
   <div class="kpis" id="kpis"></div>
   <div class="cats" id="cats"></div>
   <p class="gabung" id="gabung"></p>
@@ -195,7 +242,9 @@ const FILTER = {
               jenis: "Semua", metode_pemilihan: "Semua", sumber_dana: "Semua", kecamatan: "Semua", kelurahan: "Semua", mak_akhir: "Semua", temuan: "Semua" },
 };
 const urut = { mak: { k: "total_pagu", asc: false }, uraian: { k: "total_pagu", asc: false }, database: { k: "kode_rup", asc: true } };
-const buka = { mak: new Set(), uraian: new Set(), perbaikan: new Set(), lokasi: new Set(), database: new Set() };
+const buka = { mak: new Set(), uraian: new Set(), perbaikan: new Set(), lokasi: new Set(), database: new Set(), perubahan: new Set() };
+FILTER.perubahan = { jenis: "Semua" };
+const PR = { baris: null, error: null };
 const DB = { baris: null, kolom: null, versi: null, error: null, hal: 0, per: 50, sedang: false };
 
 /* ======================= ambil data + auto-refresh ======================= */
@@ -209,7 +258,7 @@ async function muat() {
     if (!r.ok) throw new Error(j.error || r.status);
     if (teks !== teksTerakhir) {
       teksTerakhir = teks; data = j;
-      isiTahun();
+      isiTahun(); if (!$("ambil").hidden) isiTahunAmbil();
       if (!tabTersedia(tab)) tab = "mak";
       const ks = data.klasifikasi && Object.keys(data.klasifikasi);
       if (ks && !data.klasifikasi[FILTER.kategori.kat]) FILTER.kategori.kat = ks[0];
@@ -270,14 +319,14 @@ function gambar() {
   const persen = d.paket_aktif ? (d.paket_dengan_detail * 100 / d.paket_aktif) : 0;
   $("kpis").innerHTML = `
     <div class="kpi"><div class="l">Paket yang sudah diambil detailnya</div><div class="v">${rp.format(d.paket_dengan_detail)}</div>
-      <div class="s">dari ${rp.format(d.paket_aktif)} paket aktif (${persen.toFixed(1)}%)</div>
-      <div class="progress"><i style="width:${persen}%"></i></div></div>
+      <div class="s">dari ${rp.format(d.paket_aktif)} paket aktif (${persen.toFixed(1)}%)</div></div>
     <div class="kpi"><div class="l">Total pagu (paket ber-detail)</div><div class="v">${ringkas(d.total_pagu_mak)}</div><div class="s">${fmt(d.total_pagu_mak)}</div></div>
     <div class="kpi"><div class="l">MAK berbeda</div><div class="v">${rp.format(d.jumlah_mak)}</div>
       <div class="s">rata-rata ${d.jumlah_mak ? (d.paket_dengan_detail / d.jumlah_mak).toFixed(1) : 0} paket per MAK</div></div>
     <div class="kpi"><div class="l">Uraian unik</div><div class="v">${rp.format(d.jumlah_uraian)}</div><div class="s">setelah dirapikan</div></div>
     ${d.lokasi ? `<div class="kpi"><div class="l">Jalan · Gang (fisik)</div><div class="v">${rp.format(d.lokasi.jalan.length)} · ${rp.format(d.lokasi.gang.length)}</div><div class="s">dari nama paket fisik Jalan/Saluran</div></div>` : ""}`;
 
+  renderPB();
   const k = d.klasifikasi;
   if (k) {
     const per = d.perbaikan.Semua;
@@ -304,15 +353,27 @@ function gambar() {
     ? `<div class="note err"><b>${rp.format(nE)} kesalahan</b>${nW ? ` dan ${rp.format(nW)} peringatan` : ""} terdeteksi. ${Object.values(pr.ringkas).filter((r) => r.tingkat === "kesalahan").map((r) => `${esc(r.judul)}: ${rp.format(r.jumlah)} paket (${ringkas(r.pagu)})`).join(" · ")} — <button data-tab="periksa">lihat pemeriksaan</button></div>`
     : nW ? `<div class="note warn">${rp.format(nW)} peringatan perlu dilihat — <button data-tab="periksa">lihat pemeriksaan</button></div>`
     : `<div class="note ok">Pemeriksaan: tidak ada kesalahan atau peringatan.</div>`;
+  if (d.perubahan?.revisi) cat += `<div class="note warn"><b>${rp.format(d.perubahan.revisi)} revisi RUP</b> tercatat (nama paket sama, kode RUP berganti) — <button data-tab="perubahan">lihat perubahan</button></div>`;
   $("catatan").innerHTML = cat;
 
   const badge = nE ? `<span class="badge">${nE}</span>` : nW ? `<span class="badge w">${nW}</span>` : "";
+  const nRev = d.perubahan?.revisi || 0;
   const semua = [["mak", "Per MAK"], ["uraian", "Per Uraian"], ["kategori", "Jalan & Saluran"], ["perbaikan", "Perbaikan MAK"],
-                 ["lokasi", "Jalan & Gang"], ["database", "Database"], ["periksa", "Pemeriksaan" + badge]];
+                 ["lokasi", "Jalan & Gang"], ["database", "Database"], ["perubahan", "Perubahan" + (nRev ? `<span class="badge w">${nRev}</span>` : "")], ["periksa", "Pemeriksaan" + badge]];
   $("tabs").innerHTML = semua.filter(([id]) => tabTersedia(id)).map(([id, l]) => `<button class="tab ${id === tab ? "aktif" : ""}" data-tab="${id}" role="tab">${l}</button>`).join("");
   filterUI();
   isiTabel();
   if (tab === "database") muatDb();
+  if (tab === "perubahan") muatPerubahan();
+}
+async function muatPerubahan() {
+  try {
+    const r = await fetch("/api/perubahan" + qs(), { cache: "no-store" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    PR.baris = j.baris; PR.error = null;
+  } catch (e) { PR.error = e.message; }
+  if (tab === "perubahan") { filterUI(); isiTabel(); }
 }
 
 /* ======================= kontrol filter ======================= */
@@ -341,6 +402,7 @@ function filterUI() {
       seg("kat", ["Semua", "Jalan", "Saluran"], f.kat);
   else if (tab === "periksa") h = seg("tingkat", ["Semua", "kesalahan", "peringatan"], f.tingkat) +
       sel("jenis", "Jenis", [SEMUA("Semua jenis temuan")].concat(Object.entries(data.periksa.ringkas).map(([k, r]) => [k, `${r.judul} (${r.jumlah})`])), f.jenis);
+  else if (tab === "perubahan") h = seg("jenis", [["Semua", "Semua"], ["REVISI_RUP", "Revisi RUP"], ["BERUBAH", "Berubah"], ["BARU", "Baru"], ["HILANG", "Hilang"], ["MUNCUL_KEMBALI", "Muncul kembali"]], f.jenis);
   else if (tab === "database") {
     if (!DB.baris) h = `<span class="sub">${DB.error ? "Gagal memuat database: " + esc(DB.error) : "Memuat database…"}</span>`;
     else {
@@ -355,6 +417,7 @@ function filterUI() {
   $("filter").innerHTML = h;
   const ph = { mak: "Cari MAK, nama paket, kode RUP…", uraian: "Cari uraian, nama paket, kode RUP…", kategori: "Cari nama paket, jalan, gang, kode RUP…",
     perbaikan: "Cari MAK, nama paket, jalan, kode RUP…", lokasi: "Cari nama jalan, gang, kecamatan…", periksa: "Cari nama paket, kode RUP, pesan…",
+    perubahan: "Cari nama paket atau kode RUP (lama/baru)…",
     database: "Cari di semua kolom (nama, uraian, spesifikasi, jalan, gang, MAK, lokasi…)" };
   $("cari").placeholder = ph[tab] || "Cari…";
 }
@@ -399,7 +462,7 @@ const lokTeks = (p) => p.jalan ? `<b>Jl. ${esc(p.jalan)}</b>${(p.gang || []).len
 function isiTabel() {
   const q = $("cari").value.trim().toLowerCase();
   $("halaman").innerHTML = "";
-  ({ mak: isiGrup, uraian: isiGrup, kategori: isiKategori, perbaikan: isiPerbaikan, lokasi: isiLokasi, database: isiDatabase, periksa: isiPeriksa })[tab](q);
+  ({ mak: isiGrup, uraian: isiGrup, kategori: isiKategori, perbaikan: isiPerbaikan, lokasi: isiLokasi, database: isiDatabase, perubahan: isiPerubahan, periksa: isiPeriksa })[tab](q);
 }
 
 /* ---- Per MAK / Per Uraian ---- */
@@ -514,7 +577,7 @@ const GRUP_DETAIL = [
   ["Klasifikasi & MAK", ["kategori", "jenis_pekerjaan", "jenis_kegiatan", "status_mak", "jenis_perbaikan", "mak", "mak_perbaikan", "mak_akhir"]],
   ["Lokasi", ["jalan", "gang", "komplek", "kecamatan", "kecamatan_asli", "kelurahan", "kelurahan_asli"]],
   ["Jadwal", ["pemilihan_mulai", "pemilihan_akhir", "kontrak_mulai", "kontrak_akhir", "pemanfaatan_mulai", "pemanfaatan_akhir", "pelaksanaan_mulai", "pelaksanaan_akhir", "tanggal_umumkan"]],
-  ["Lainnya", ["spp_ekonomi", "spp_sosial", "spp_lingkungan", "tipe_swakelola", "penyelenggara_swakelola", "temuan", "aktif", "ada_detail", "first_seen", "last_seen", "diambil_pada"]],
+  ["Lainnya", ["spp_ekonomi", "spp_sosial", "spp_lingkungan", "tipe_swakelola", "penyelenggara_swakelola", "temuan", "kode_rup_sebelumnya", "kode_rup_pengganti", "aktif", "ada_detail", "first_seen", "last_seen", "diambil_pada"]],
 ];
 function dbTersaring(q) {
   const f = FILTER.database;
@@ -555,6 +618,35 @@ function isiDatabase(q) {
   $("halaman").innerHTML = `<div class="halaman"><span class="sub">Halaman ${hal + 1} dari ${hm}</span><span style="display:flex;gap:8px;align-items:center">
     <button class="btn" data-hal="-1" ${hal === 0 ? "disabled" : ""}>‹ Sebelumnya</button><button class="btn" data-hal="1" ${hal >= hm - 1 ? "disabled" : ""}>Berikutnya ›</button>
     <label class="flab">Per halaman<select id="perhal">${[25, 50, 100, 250].map((n) => `<option ${n === DB.per ? "selected" : ""}>${n}</option>`).join("")}</select></label></span></div>`;
+}
+
+/* ---- Perubahan: REVISI_RUP = nama paket sama, kode RUP berganti ---- */
+const NAMA_JENIS = { REVISI_RUP: "Revisi RUP", BERUBAH: "Berubah", BARU: "Baru", HILANG: "Hilang", MUNCUL_KEMBALI: "Muncul kembali" };
+const kodeLink = (kode, link) => `<a class="mono" href="${esc(link || "#")}" target="_blank" rel="noopener">${esc(kode)}</a>`;
+function isiPerubahan(q) {
+  if (!PR.baris) { $("ringkasan").innerHTML = ""; $("hitung").textContent = ""; $("tabel").innerHTML = `<tbody><tr><td class="kosong">${PR.error ? "Gagal memuat: " + esc(PR.error) : "Memuat perubahan…"}</td></tr></tbody>`; return; }
+  const f = FILTER.perubahan;
+  const hitung = {}; PR.baris.forEach((b) => hitung[b.jenis_event] = (hitung[b.jenis_event] || 0) + 1);
+  const rows = PR.baris.filter((b) => (f.jenis === "Semua" || b.jenis_event === f.jenis) &&
+    (!q || (b.nama_paket || "").toLowerCase().includes(q) || b.kunci.includes(q) || (b.nilai_lama || "").includes(q) || (b.nilai_baru || "").includes(q)));
+  $("hitung").textContent = `${rows.length} perubahan`;
+  $("ringkasan").innerHTML = `<div class="ringkasan"><b>Perubahan utama = Revisi RUP</b>: nama paket sama, tetapi kode RUP berganti (kode lama hilang dari SiRUP, kode baru muncul). ` +
+    (PR.baris.length ? Object.entries(hitung).map(([k, n]) => `${NAMA_JENIS[k] || k}: <b>${n}</b>`).join(" · ")
+      : "Belum ada perubahan tercatat. Pengambilan daftar pertama untuk suatu tahun menjadi data dasar; perubahan dicatat bila terlihat pada pengambilan daftar berikutnya.") + `</div>`;
+  $("tabel").innerHTML = kepala([["Waktu"], ["Jenis"], ["Nama paket"], ["Perubahan"], ["Pagu", "num"]]) + "<tbody>" +
+    (rows.length ? rows.map((b) => {
+      let isi = "–", pagu = fmt(b.pagu);
+      if (b.jenis_event === "REVISI_RUP") {
+        isi = `RUP ${kodeLink(b.nilai_lama, b.link_lama)} → ${kodeLink(b.nilai_baru, b.link)}`;
+        pagu = `${b.pagu_lama != null ? fmt(b.pagu_lama) + " → " : ""}${fmt(b.pagu)}${b.selisih ? `<div class="sub">${selisihTag(b.selisih)}</div>` : ""}`;
+      } else if (b.jenis_event === "BERUBAH") {
+        const uang = b.field === "pagu";
+        isi = `<b>${esc(b.field)}</b>: ${esc(uang ? fmt(b.nilai_lama) : b.nilai_lama)} → ${esc(uang ? fmt(b.nilai_baru) : b.nilai_baru)}${b.selisih ? ` ${selisihTag(b.selisih)}` : ""}`;
+      }
+      return `<tr><td class="sub" style="white-space:nowrap">${esc((b.waktu || "").replace("T", " "))}${b.sumber === "SIRUP_DETAIL" ? "<div>detail</div>" : ""}</td>
+        <td><span class="tag ${b.jenis_event === "REVISI_RUP" ? "revisi" : b.jenis_event === "HILANG" ? "kesalahan" : ""}">${esc(NAMA_JENIS[b.jenis_event] || b.jenis_event)}</span></td>
+        <td>${esc(b.nama_paket)}${b.jenis_event !== "REVISI_RUP" ? `<div>${kodeLink(b.kunci, b.link)}</div>` : ""}</td><td>${isi}</td><td class="num">${pagu}</td></tr>`;
+    }).join("") : `<tr><td colspan="5" class="kosong">Tidak ada perubahan untuk filter ini.</td></tr>`) + "</tbody>";
 }
 
 /* ---- Pemeriksaan ---- */
@@ -605,6 +697,11 @@ $("unduh").addEventListener("click", () => {
     } else { nama = "database_nama_gang.csv";
       baris = [["nama_gang", "tipe", "jalan", "kecamatan", "jumlah_paket", "total_pagu", "ejaan_lain"].join(",")].concat(L.gang.filter(ok).map((g) => [c(g.nama), g.tipe, c(g.jalan), c(g.kecamatan.join("; ")), g.jumlah_paket, g.total_pagu, c(g.variasi.join("; "))].join(",")));
     }
+  } else if (tab === "perubahan" && PR.baris) {
+    nama = "perubahan_paket.csv";
+    baris = [["waktu", "jenis", "nama_paket", "kode_rup", "rup_lama", "rup_baru", "field", "nilai_lama", "nilai_baru", "selisih", "pagu"].join(",")].concat(
+      PR.baris.map((b) => [b.waktu, b.jenis_event, c(b.nama_paket), b.kunci, b.jenis_event === "REVISI_RUP" ? b.nilai_lama : "", b.jenis_event === "REVISI_RUP" ? b.nilai_baru : "",
+        b.field || "", c(b.jenis_event === "REVISI_RUP" ? "" : b.nilai_lama), c(b.jenis_event === "REVISI_RUP" ? "" : b.nilai_baru), b.selisih ?? "", b.pagu].join(",")));
   } else if (tab === "periksa") {
     nama = "temuan_pemeriksaan.csv";
     baris = [["tingkat", "jenis", "kode_rup", "nama_paket", "pesan", "pagu_terkait", "link"].join(",")].concat(data.periksa.temuan.map((t) => [t.tingkat, t.jenis, t.kode_rup, c(t.nama_paket), c(t.pesan), t.pagu, t.link].join(",")));
@@ -616,6 +713,87 @@ $("unduh").addEventListener("click", () => {
   a.href = URL.createObjectURL(new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
   a.download = nama; a.click(); URL.revokeObjectURL(a.href);
 });
+
+/* ======================= Ambil data (jalankan pekerjaan dari dashboard) ======================= */
+const AMBIL = { poll: null, status: "idle", t: null };
+function renderPB() {
+  if (!data) return;
+  const n = data.paket_dengan_detail, total = data.paket_aktif, persen = total ? n * 100 / total : 0;
+  const t = AMBIL.t, jalan = t && t.status === "berjalan";
+  $("pb-angka").textContent = `${rp.format(n)} / ${rp.format(total)} paket`;
+  $("pb-isi").style.width = persen + "%";
+  $("pb-persen").textContent = persen.toFixed(1).replace(".", ",") + "%";
+  $("pb-bar").className = "pb-bar" + (jalan ? " jalan" : "") + (total && n >= total ? " penuh" : "");
+  $("pb-bar").setAttribute("aria-valuenow", Math.round(persen));
+  let ket = `Tahun ${data.target.tahun}. `;
+  if (!total) ket += "Belum ada daftar RUP untuk tahun ini — klik Ambil data…, lalu Ambil Data + Detail.";
+  else if (n >= total) ket += "Semua paket sudah diambil detailnya" + (data.detail_terakhir_diambil ? ` (terakhir ${data.detail_terakhir_diambil.replace("T", " ")}).` : ".");
+  else ket += `Sisa ${rp.format(total - n)} paket belum diambil detailnya.`;
+  if (jalan) ket += ` Sedang berjalan — ${t.tahap_ke ? `tahap ${t.tahap_ke}/${t.tahap_total} (${t.tahap_nama})` : t.jenis}${t.total ? `: ${rp.format(t.selesai)}/${rp.format(t.total)}` : ""}, ${t.koneksi} koneksi, jeda ${t.jeda} detik.`;
+  $("pb-ket").textContent = ket;
+}
+const A = { tahun: $("a-tahun"), koneksi: $("a-koneksi"), jeda: $("a-jeda"), usia: $("a-usia"), semua: $("a-semua") };
+(function pulihPilihan() { try { const o = JSON.parse(baca("rekap_ambil", "{}")); for (const [k, el] of Object.entries(A)) if (k !== "tahun" && o[k] !== undefined) { if (el.type === "checkbox") el.checked = !!o[k]; else el.value = o[k]; } } catch (e) {} })();
+function simpanPilihan() { simpan("rekap_ambil", JSON.stringify({ koneksi: A.koneksi.value, jeda: A.jeda.value, usia: A.usia.value, semua: A.semua.checked })); }
+function isiTahunAmbil() {
+  if (!data) return;
+  const th = new Set(data.tahun_tersedia.map(String)); const sk = new Date().getFullYear();
+  [sk, sk - 1, sk - 2].forEach((y) => th.add(String(y)));
+  const pilih = A.tahun.value || String(data.target.tahun);
+  A.tahun.innerHTML = [...th].sort().reverse().map((y) => `<option ${y === pilih ? "selected" : ""}>${y}</option>`).join("");
+}
+function infoLaju() {
+  const k = parseInt(A.koneksi.value, 10), j = parseFloat(A.jeda.value), r = k / (j + 0.4);
+  const kls = r > 3 ? "tinggi" : r > 1.5 ? "sedang" : "";
+  $("a-laju").className = "laju " + kls;
+  $("a-laju").textContent = `Perkiraan laju detail: ±${r.toFixed(1)} permintaan/detik` + (r > 3 ? " — TINGGI, risiko diblokir server. Disarankan ≤ 3." : r > 1.5 ? " — sedang." : " — aman.") +
+    ` Hampir 1.000 detail ≈ ${Math.max(1, Math.round(1000 / r / 60))} menit.`;
+}
+[A.koneksi, A.jeda, A.usia, A.semua].forEach((el) => el.addEventListener("change", () => { simpanPilihan(); infoLaju(); }));
+$("bukaAmbil").addEventListener("click", () => { const p = $("ambil"); p.hidden = !p.hidden; if (!p.hidden) { isiTahunAmbil(); infoLaju(); cekTugas(); } });
+async function kirimTugas(jenis) {
+  try {
+    const r = await fetch("/api/tugas/mulai", { method: "POST", headers: { "Content-Type": "application/json", "X-Pantau": "1" },
+      body: JSON.stringify({ jenis, tahun: parseInt(A.tahun.value, 10), koneksi: parseInt(A.koneksi.value, 10), jeda: parseFloat(A.jeda.value), usia_hari: parseInt(A.usia.value, 10), semua: A.semua.checked }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    gambarTugas(j); mulaiPoll();
+    if (data && String(j.tahun) !== String(data.target.tahun)) {      // ikuti tahun tugas agar bilah progres menunjukkan tahun yang sedang diambil
+      tahun = String(j.tahun); simpan("rekap_tahun", tahun);
+      teksTerakhir = ""; DB.baris = null; DB.versi = null; Object.values(buka).forEach((x) => x.clear());
+      muat();
+    }
+  } catch (e) { $("a-status").innerHTML = `<div class="note err">${esc(e.message)}</div>`; }
+}
+$("a-mulai").addEventListener("click", () => kirimTugas("semua"));
+$("a-henti").addEventListener("click", () => fetch("/api/tugas/henti", { method: "POST", headers: { "Content-Type": "application/json", "X-Pantau": "1" }, body: "{}" }).then(cekTugas));
+const NAMA_STATUS = { berjalan: "Berjalan", selesai: "Selesai", gagal: "Gagal / ditolak server", dihentikan: "Dihentikan" };
+function gambarTugas(t) {
+  const jalan = t.status === "berjalan";
+  $("a-mulai").disabled = jalan; $("a-henti").disabled = !jalan;
+  AMBIL.t = t;
+  const tahapTeks = t.tahap_ke ? `Tahap ${t.tahap_ke}/${t.tahap_total}: ${t.tahap_nama}` : (t.jenis === "detail" ? "Detail paket" : "Daftar RUP");
+  $("jobTeks").textContent = jalan ? `● ${tahapTeks}${t.total ? ` ${t.selesai}/${t.total}` : "…"}` : "";
+  renderPB();
+  if (t.status === "idle") { $("a-status").innerHTML = ""; return; }
+  const persen = t.total ? Math.round(t.selesai * 100 / t.total) : 0;
+  $("a-status").innerHTML = `<div class="sub" style="margin-top:10px"><b>${NAMA_STATUS[t.status] || t.status}</b> · ${tahapTeks} · tahun ${t.tahun} · ${t.koneksi} koneksi, jeda ${t.jeda} detik` +
+    (t.total ? ` · ${t.selesai}/${t.total} (berhasil ${t.ok}, gagal ${t.gagal})` : "") + `</div>` +
+    (t.total ? `<div class="progress"><i style="width:${persen}%"></i></div>` : "") +
+    (t.peringatan ? `<div class="note warn" style="margin-top:8px">${esc(t.peringatan)}</div>` : "") +
+    `<pre class="log" id="a-log">${esc((t.log || []).slice(-14).join("\n"))}</pre>`;
+  const lg = $("a-log"); if (lg) lg.scrollTop = lg.scrollHeight;
+}
+async function cekTugas() {
+  try {
+    const t = await (await fetch("/api/tugas", { cache: "no-store" })).json();
+    const sebelum = AMBIL.status; AMBIL.status = t.status; gambarTugas(t);
+    if (t.status === "berjalan") mulaiPoll();
+    else { clearInterval(AMBIL.poll); AMBIL.poll = null; if (sebelum === "berjalan") { DB.versi = null; teksTerakhir = ""; await muat(); if (tab === "database") muatDb(); } }
+  } catch (e) {}
+}
+function mulaiPoll() { if (!AMBIL.poll) AMBIL.poll = setInterval(cekTugas, 1000); }
+cekTugas();
 
 aturTimer();
 muat();

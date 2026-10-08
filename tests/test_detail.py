@@ -73,6 +73,16 @@ class TestDetailDb(unittest.TestCase):
         self.assertEqual(self.antre(), ["2"])
         self.assertEqual(self.antre(semua=True), ["1", "2"])
 
+    def test_detail_lama_diambil_ulang_walau_pagu_dan_nama_sama(self):
+        from datetime import datetime, timedelta
+        db.simpan_detail(self.conn, self.rid, "1", "P", 100, self.d)
+        db.simpan_detail(self.conn, self.rid, "2", "P", 100, self.d)
+        lama = (datetime.now() - timedelta(days=10)).isoformat(timespec="seconds")
+        self.conn.execute("UPDATE sirup_detail SET diambil_pada=? WHERE kode_rup='1'", (lama,))
+        self.assertEqual([r["kode_rup"] for r in db.paket_perlu_detail(self.conn, 1, 2026, usia_hari=7)], ["1"])
+        self.assertEqual(db.paket_perlu_detail(self.conn, 1, 2026), [])                       # tanpa batas umur: dianggap baru
+        self.assertEqual([r["kode_rup"] for r in db.paket_perlu_detail(self.conn, 1, 2026, usia_hari=30)], [])
+
     def test_gagal_tetap_masuk_antrean(self):
         db.catat_gagal_detail(self.conn, "2", "halaman rusak")
         self.assertEqual(self.antre(), ["1", "2"])

@@ -19,6 +19,7 @@ KOLOM = [
     ("komplek", "Komplek"), ("kecamatan", "Kecamatan"), ("kelurahan", "Kelurahan"), ("kecamatan_asli", "Kecamatan (tertulis)"),
     ("kelurahan_asli", "Kelurahan (tertulis)"), ("temuan", "Temuan Pemeriksaan"),
 ] + [(k, k.replace("_", " ").capitalize()) for k in EXTRA_KUNCI] + [
+    ("kode_rup_sebelumnya", "RUP sebelumnya (revisi)"), ("kode_rup_pengganti", "RUP pengganti (revisi)"),
     ("aktif", "Aktif"), ("first_seen", "Pertama terlihat"), ("last_seen", "Terakhir terlihat"),
     ("diambil_pada", "Detail diambil"), ("ada_detail", "Ada detail")]
 
@@ -58,6 +59,7 @@ def baris(conn, target, data):
             "komplek": t.get("komplek", []), "kecamatan": t.get("kecamatan"), "kelurahan": t.get("kelurahan"),
             "kecamatan_asli": t.get("kecamatan_asli"), "kelurahan_asli": t.get("kelurahan_asli"),
             "temuan": temuan.get(r["kode_rup"], []),
+            "kode_rup_sebelumnya": r["kode_rup_sebelumnya"], "kode_rup_pengganti": r["kode_rup_pengganti"],
             "aktif": bool(r["is_active"]), "first_seen": r["first_seen"], "last_seen": r["last_seen"],
             "diambil_pada": r["diambil_pada"], "ada_detail": r["ada_detail"] is not None,
             "mak_entri": t.get("mak_entri", []),
@@ -66,6 +68,28 @@ def baris(conn, target, data):
         for k in EXTRA_KUNCI:
             b[k] = extra.get(k)
         hasil.append(b)
+    return hasil
+
+
+def perubahan(conn, target, batas=3000):
+    """Riwayat perubahan paket (terbaru dulu). REVISI_RUP = nama paket sama, kode RUP berganti."""
+    sat, th = target["id_satker"], target["tahun"]
+    info = {r["kode_rup"]: r for r in conn.execute(
+        "SELECT kode_rup, pagu, link, nama_paket, is_active FROM sirup_paket WHERE id_satker=? AND tahun=?", (sat, th))}
+    rows = conn.execute(
+        "SELECT e.id,e.waktu,e.sumber,e.jenis_event,e.kunci,e.nama_paket,e.field,e.nilai_lama,e.nilai_baru,e.selisih "
+        "FROM paket_events e JOIN sirup_paket p ON p.kode_rup=e.kunci WHERE p.id_satker=? AND p.tahun=? "
+        "ORDER BY e.id DESC LIMIT ?", (sat, th, batas)).fetchall()
+    hasil = []
+    for r in rows:
+        x = dict(r)
+        x["link"] = info[r["kunci"]]["link"]
+        x["pagu"] = info[r["kunci"]]["pagu"]
+        if r["jenis_event"] == "REVISI_RUP":
+            lama = info.get(r["nilai_lama"])
+            x["link_lama"] = lama["link"] if lama else None
+            x["pagu_lama"] = lama["pagu"] if lama else None
+        hasil.append(x)
     return hasil
 
 

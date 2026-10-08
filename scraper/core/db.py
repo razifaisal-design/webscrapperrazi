@@ -1,7 +1,7 @@
 """Penyimpanan lokal SQLite + finalisasi run (diff -> event -> upsert -> tandai hilang) dalam satu transaksi."""
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .mak import mak_inti
@@ -23,12 +23,13 @@ CREATE TABLE IF NOT EXISTS sirup_paket (
   nama_paket TEXT, penyelenggara TEXT, pagu NUMERIC,
   metode_pemilihan TEXT, sumber_dana TEXT, waktu_pemilihan TEXT,
   link TEXT,
-  first_seen TEXT, last_seen TEXT, is_active INTEGER DEFAULT 1, last_run_id INTEGER
+  first_seen TEXT, last_seen TEXT, is_active INTEGER DEFAULT 1, last_run_id INTEGER,
+  kode_rup_sebelumnya TEXT, kode_rup_pengganti TEXT
 );
 CREATE TABLE IF NOT EXISTS paket_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id INTEGER, sumber TEXT, kunci TEXT, nama_paket TEXT,
-  jenis_event TEXT,                     -- BARU | BERUBAH | HILANG | MUNCUL_KEMBALI | KEMUNGKINAN_REVISI
+  jenis_event TEXT,                     -- BARU | BERUBAH | HILANG | MUNCUL_KEMBALI | REVISI_RUP
   field TEXT, nilai_lama TEXT, nilai_baru TEXT, selisih NUMERIC, waktu TEXT
 );
 CREATE TABLE IF NOT EXISTS sirup_detail (
@@ -52,6 +53,10 @@ def buka(path=DB_DEFAULT):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    ada = {r[1] for r in conn.execute("PRAGMA table_info(sirup_paket)")}
+    for kol in ("kode_rup_sebelumnya", "kode_rup_pengganti"):     # database lama: tambah kolom
+        if kol not in ada:
+            conn.execute(f"ALTER TABLE sirup_paket ADD COLUMN {kol} TEXT")
     return conn
 
 
@@ -107,7 +112,12 @@ def _norm(nama):
 
 
 def finalisasi(conn, run_id, paket, id_satker, tahun):
-    """Satu transaksi: diff vs data saat ini -> event -> upsert -> tandai hilang. Return ringkasan."""
+    """Satu transaksi: diff vs data saat ini -> event -> upsert -> tandai hilang. Return ringkasan.
+
+    PERUBAHAN UTAMA = REVISI_RUP: nama paket SAMA tetapi kode RUP berganti (kode lama hilang dari SiRUP, kode baru
+    muncul). Pasangan dicari lewat nama yang sama; bila ada beberapa, dipasangkan menurut pagu terdekat. Pasangan
+    itu dicatat sebagai satu event REVISI_RUP (menggantikan event BARU + HILANG masing-masing) dan saling ditautkan
+    (kode_rup_sebelumnya / kode_rup_pengganti)."""
     now = _now()
     ringkasan = {"baru": 0, "berubah": 0, "hilang": 0, "muncul_kembali": 0, "revisi": 0, "baseline": False}
     with conn:
@@ -121,6 +131,23 @@ def finalisasi(conn, run_id, paket, id_satker, tahun):
             r["kode_rup"]: r
             for r in conn.execute("SELECT * FROM sirup_paket WHERE id_satker=? AND tahun=?", (id_satker, tahun))
         }
+        baru_p = {p["kode_rup"]: p for p in paket if p["kode_rup"] not in lama}
+        terlihat = {p["kode_rup"] for p in paket}
+        hilang = [k for k, o in lama.items() if o["is_active"] and k not in terlihat]
+
+        # pasangkan REVISI_RUP: nama sama, kode berganti
+        pasangan = {}   # kode_baru -> kode_lama
+        if not baseline:
+            hilang_nama = {}
+            for k in hilang:
+                hilang_nama.setdefault(_norm(lama[k]["nama_paket"]), []).append(k)
+            for kb in sorted(baru_p):
+                kandidat = hilang_nama.get(_norm(baru_p[kb]["nama_paket"]))
+                if kandidat:
+                    kh = min(kandidat, key=lambda k: abs((lama[k]["pagu"] or 0) - (baru_p[kb]["pagu"] or 0)))
+                    kandidat.remove(kh)
+                    pasangan[kb] = kh
+        diganti = set(pasangan.values())
 
         def event(kunci, nama, jenis_event, field=None, lama_v=None, baru_v=None, selisih=None):
             if baseline:
@@ -132,21 +159,24 @@ def finalisasi(conn, run_id, paket, id_satker, tahun):
                  None if lama_v is None else str(lama_v), None if baru_v is None else str(baru_v), selisih, now),
             )
 
-        baru_kode, terlihat = [], set()
         for p in paket:
             k = p["kode_rup"]
-            terlihat.add(k)
             o = lama.get(k)
             if o is None:
-                event(k, p["nama_paket"], "BARU")
-                ringkasan["baru"] += 1
-                baru_kode.append(k)
+                if k in pasangan:
+                    kh = pasangan[k]
+                    event(k, p["nama_paket"], "REVISI_RUP", "kode_rup", kh, k, (p["pagu"] or 0) - (lama[kh]["pagu"] or 0))
+                    ringkasan["revisi"] += 1
+                else:
+                    event(k, p["nama_paket"], "BARU")
+                    ringkasan["baru"] += 1
                 conn.execute(
                     "INSERT INTO sirup_paket(kode_rup,tahun,klpd_nama,id_satker,jenis,nama_paket,penyelenggara,pagu,"
-                    "metode_pemilihan,sumber_dana,waktu_pemilihan,link,first_seen,last_seen,is_active,last_run_id) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)",
+                    "metode_pemilihan,sumber_dana,waktu_pemilihan,link,first_seen,last_seen,is_active,last_run_id,"
+                    "kode_rup_sebelumnya) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",
                     (k, p["tahun"], p["klpd_nama"], p["id_satker"], p["jenis"], p["nama_paket"], p["penyelenggara"],
-                     p["pagu"], p["metode_pemilihan"], p["sumber_dana"], p["waktu_pemilihan"], p["link"], now, now, run_id),
+                     p["pagu"], p["metode_pemilihan"], p["sumber_dana"], p["waktu_pemilihan"], p["link"], now, now,
+                     run_id, pasangan.get(k)),
                 )
                 continue
             if not o["is_active"]:
@@ -164,36 +194,38 @@ def finalisasi(conn, run_id, paket, id_satker, tahun):
                  p["waktu_pemilihan"], p["link"], now, run_id, k),
             )
 
-        hilang = [k for k, o in lama.items() if o["is_active"] and k not in terlihat]
         for k in hilang:
-            event(k, lama[k]["nama_paket"], "HILANG")
-            ringkasan["hilang"] += 1
+            if k not in diganti:
+                event(k, lama[k]["nama_paket"], "HILANG")
+                ringkasan["hilang"] += 1
             conn.execute("UPDATE sirup_paket SET is_active=0, last_run_id=? WHERE kode_rup=?", (run_id, k))
-
-        # Penanda 'kemungkinan revisi': paket hilang + paket baru dengan nama sama (kode RUP berganti)
-        baru_by_nama = {}
-        for p in paket:
-            if p["kode_rup"] in baru_kode:
-                baru_by_nama.setdefault(_norm(p["nama_paket"]), []).append(p["kode_rup"])
-        for k in hilang:
-            for kb in baru_by_nama.get(_norm(lama[k]["nama_paket"]), []):
-                event(kb, lama[k]["nama_paket"], "KEMUNGKINAN_REVISI", "kode_rup", k, kb)
-                ringkasan["revisi"] += 1
+        for kb, kh in pasangan.items():
+            conn.execute("UPDATE sirup_paket SET kode_rup_pengganti=? WHERE kode_rup=?", (kb, kh))
     return ringkasan
 
 
 DETAIL_DIPANTAU = ("lokasi_ringkas", "volume", "uraian", "spesifikasi", "mak", "extra_json")
 
 
-def paket_perlu_detail(conn, id_satker, tahun, semua=False):
-    """Paket aktif yang detailnya belum ada / gagal / sudah basi (pagu atau nama di daftar berubah)."""
+def paket_perlu_detail(conn, id_satker, tahun, semua=False, usia_hari=None, sekarang=None):
+    """Paket aktif yang detailnya belum ada / gagal / basi. Basi = pagu atau nama di daftar berubah,
+    ATAU (bila usia_hari diisi) diambil lebih dari usia_hari hari lalu - karena isi detail (volume, MAK, jadwal...)
+    bisa berubah tanpa pagu/nama berubah."""
     sql = ("SELECT p.kode_rup,p.jenis,p.nama_paket,p.pagu FROM sirup_paket p "
            "LEFT JOIN sirup_detail d ON d.kode_rup=p.kode_rup "
            "WHERE p.id_satker=? AND p.tahun=? AND p.is_active=1 ")
     if not semua:
         sql += ("AND (d.kode_rup IS NULL OR d.error IS NOT NULL OR d.pagu_saat_diambil IS NOT p.pagu "
-                "OR d.nama_saat_diambil IS NOT p.nama_paket) ")
-    return conn.execute(sql + "ORDER BY p.kode_rup", (id_satker, tahun)).fetchall()
+                "OR d.nama_saat_diambil IS NOT p.nama_paket")
+        param = [id_satker, tahun]
+        if usia_hari:
+            batas = ((sekarang or datetime.now()) - timedelta(days=usia_hari)).isoformat(timespec="seconds")
+            sql += " OR d.diambil_pada < ?"
+            param.append(batas)
+        sql += ") "
+    else:
+        param = [id_satker, tahun]
+    return conn.execute(sql + "ORDER BY p.kode_rup", param).fetchall()
 
 
 def simpan_detail(conn, run_id, kode, nama, pagu, d):
