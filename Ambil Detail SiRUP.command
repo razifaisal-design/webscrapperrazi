@@ -1,6 +1,7 @@
 #!/bin/bash
 # Klik dua kali: ambil detail paket (lokasi, volume, uraian, spesifikasi) yang belum ada / berubah.
 # Aman dihentikan (Ctrl+C) dan dilanjutkan; hanya paket baru/berubah yang diambil.
+# Di akhir otomatis membangun database Nama Jalan & Nama Gang + CSV lengkap.
 cd "$(dirname "$0")" || exit 1
 read -p "Tahun anggaran (Enter = tahun di config): " TAHUN
 OPT=""; [ -n "$TAHUN" ] && OPT="--tahun $TAHUN"

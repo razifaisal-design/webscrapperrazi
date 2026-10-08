@@ -40,16 +40,20 @@ def ekspor_lengkap(conn, target):
     return f"{csv_path(target)} ({n} baris, semua kolom)"
 
 
-def cmd_lokasi(args):
+def bangun_lokasi(conn, target, db_path):
+    """Bangun tabel Jalan/Gang/Paket-Lokasi + CSV lengkap. Dipanggil otomatis di akhir 'detail'."""
     from .core import database, rekap
-    nama, target = muat_target(args.target, args.tahun)
-    conn = db.buka(args.db)
     data = rekap.lengkap(conn, target)
     nj, ng = database.simpan_lokasi(conn, target, data)
     print(f"Tabel ref_jalan: {nj} jalan | ref_gang: {ng} gang/komplek | paket_lokasi: {len(data['lokasi']['per_paket'])} paket fisik")
     if data["lokasi"]["tidak_terbaca"]:
         print(f"Nama jalan TIDAK terbaca pada {len(data['lokasi']['tidak_terbaca'])} paket: {', '.join(data['lokasi']['tidak_terbaca'][:10])}")
-    print(f"DB  : {args.db}\nCSV : {ekspor_lengkap(conn, target)}")
+    print(f"DB  : {db_path}\nCSV : {ekspor_lengkap(conn, target)}")
+
+
+def cmd_lokasi(args):
+    nama, target = muat_target(args.target, args.tahun)
+    bangun_lokasi(db.buka(args.db), target, args.db)
     return 0
 
 
@@ -107,6 +111,8 @@ def cmd_detail(args):
         antre = antre[: args.limit]
     if not antre:
         print("Semua detail paket sudah terbaru. (Gunakan --semua untuk mengambil ulang semuanya.)")
+        print("\nMembangun database Nama Jalan & Nama Gang ...")
+        bangun_lokasi(conn, target, args.db)
         return 0
     perkiraan = len(antre) * (args.jeda + 0.4) / 60
     print(f"{len(antre)} paket akan diambil detailnya (perkiraan ±{perkiraan:.0f} menit). Ctrl+C aman: yang sudah diambil tersimpan.")
@@ -140,7 +146,8 @@ def cmd_detail(args):
     print(f"\nSelesai. Detail berhasil: {ok}, gagal: {len(gagal)}")
     for k, m in gagal[:10]:
         print(f"  gagal {k}: {m}")
-    print(f"CSV : {ekspor_lengkap(conn, target)}")
+    print("\nMembangun database Nama Jalan & Nama Gang ...")
+    bangun_lokasi(conn, target, args.db)
     return 0 if not gagal else 4
 
 
