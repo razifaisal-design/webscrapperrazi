@@ -19,9 +19,9 @@ def norm_uraian(uraian):
     return "; ".join(bagian) or TANPA_URAIAN
 
 
-def _ringkas_kategori(klas, paket):
+def ringkas_kategori(nama_kategori, paket):
     hasil = {}
-    for nama in klas.kategori:
+    for nama in nama_kategori:
         hasil[nama] = {"total_pagu": 0, "jumlah_paket": 0,
                        FISIK: {"total_pagu": 0, "jumlah_paket": 0},
                        KONSULTAN: {"total_pagu": 0, "jumlah_paket": 0}, "paket": []}
@@ -32,6 +32,28 @@ def _ringkas_kategori(klas, paket):
             b["jumlah_paket"] += 1
         g["paket"].append(p["kode_rup"])
     return hasil
+
+
+def agregat_dari_paket(paket):
+    """Daftar per-MAK dan per-uraian dari dict paket (dipakai satu tahun maupun gabungan semua tahun)."""
+    per_mak, per_uraian = {}, {}
+    for kode, p in paket.items():
+        gu = per_uraian.setdefault(p["uraian"].lower(), {"uraian": p["uraian"], "total_pagu": 0, "paket": []})
+        gu["total_pagu"] += p["pagu"]
+        gu["paket"].append(kode)
+        for mak, nilai in p["mak"]:
+            g = per_mak.setdefault(mak, {"total_pagu": 0, "paket": {}})
+            g["total_pagu"] += nilai
+            g["paket"][kode] = g["paket"].get(kode, 0) + nilai
+    daftar_mak = sorted(
+        ({"mak": mak, "jumlah_paket": len(g["paket"]), "total_pagu": g["total_pagu"],
+          "paket": sorted(([k, v] for k, v in g["paket"].items()), key=lambda x: -x[1])}
+         for mak, g in per_mak.items()), key=lambda x: -x["total_pagu"])
+    daftar_uraian = sorted(
+        ({"uraian": g["uraian"], "jumlah_paket": len(g["paket"]), "total_pagu": g["total_pagu"],
+          "paket": sorted(g["paket"], key=lambda k: -paket[k]["pagu"])}
+         for g in per_uraian.values()), key=lambda x: -x["total_pagu"])
+    return daftar_mak, daftar_uraian
 
 
 def rekap_mak(conn, id_satker, tahun, aturan=None, mak_segmen=SEGMEN_DEFAULT):
@@ -46,7 +68,7 @@ def rekap_mak(conn, id_satker, tahun, aturan=None, mak_segmen=SEGMEN_DEFAULT):
         (id_satker, tahun),
     ).fetchall()
 
-    per_mak, per_uraian, paket, total_daftar, terakhir = {}, {}, {}, 0, None
+    paket, total_daftar, terakhir = {}, 0, None
     for r in rows:
         total_daftar += r["pagu"] or 0
         if r["diambil_pada"] and (terakhir is None or r["diambil_pada"] > terakhir):
@@ -56,32 +78,17 @@ def rekap_mak(conn, id_satker, tahun, aturan=None, mak_segmen=SEGMEN_DEFAULT):
         uraian = norm_uraian(r["uraian"])
         kategori, jenis_kerja = klas(r["nama_paket"], uraian) if klas else (None, None)
         paket[r["kode_rup"]] = {
-            "kode_rup": r["kode_rup"], "nama_paket": r["nama_paket"], "jenis": r["jenis"], "link": r["link"],
+            "tahun": tahun, "kode_rup": r["kode_rup"], "nama_paket": r["nama_paket"], "jenis": r["jenis"], "link": r["link"],
             "uraian": uraian, "volume": r["volume"], "pagu": pagu_detail, "pagu_daftar": r["pagu"], "mak": [],
             "kategori": kategori, "jenis_pekerjaan": jenis_kerja}
 
-        gu = per_uraian.setdefault(uraian.lower(), {"uraian": uraian, "total_pagu": 0, "paket": []})
-        gu["total_pagu"] += pagu_detail
-        gu["paket"].append(r["kode_rup"])
-
         gabung = {}
-        for s in rincian:
-            m = norm_mak(s.get("mak"), mak_segmen)
-            gabung[m] = gabung.get(m, 0) + (s.get("pagu") or 0)
+        for s_ in rincian:
+            m = norm_mak(s_.get("mak"), mak_segmen)
+            gabung[m] = gabung.get(m, 0) + (s_.get("pagu") or 0)
         paket[r["kode_rup"]]["mak"] = [[m, v] for m, v in gabung.items()]
-        for s in rincian:
-            g = per_mak.setdefault(norm_mak(s.get("mak"), mak_segmen), {"total_pagu": 0, "paket": {}})
-            g["total_pagu"] += s.get("pagu") or 0
-            g["paket"][r["kode_rup"]] = g["paket"].get(r["kode_rup"], 0) + (s.get("pagu") or 0)
 
-    daftar_mak = sorted(
-        ({"mak": mak, "jumlah_paket": len(g["paket"]), "total_pagu": g["total_pagu"],
-          "paket": sorted(([k, v] for k, v in g["paket"].items()), key=lambda x: -x[1])}
-         for mak, g in per_mak.items()), key=lambda x: -x["total_pagu"])
-    daftar_uraian = sorted(
-        ({"uraian": g["uraian"], "jumlah_paket": len(g["paket"]), "total_pagu": g["total_pagu"],
-          "paket": sorted(g["paket"], key=lambda k: -paket[k]["pagu"])}
-         for g in per_uraian.values()), key=lambda x: -x["total_pagu"])
+    daftar_mak, daftar_uraian = agregat_dari_paket(paket)
 
     total_mak = sum(x["total_pagu"] for x in daftar_mak)
     return {
@@ -95,9 +102,21 @@ def rekap_mak(conn, id_satker, tahun, aturan=None, mak_segmen=SEGMEN_DEFAULT):
         "detail_terakhir_diambil": terakhir,
         "per_mak": daftar_mak,
         "per_uraian": daftar_uraian,
-        "klasifikasi": _ringkas_kategori(klas, paket.values()) if klas else None,
+        "klasifikasi": ringkas_kategori(klas.kategori, paket.values()) if klas else None,
         "paket": paket,
     }
+
+
+def aturan_periksa_tahun(target):
+    """Pemetaan MAK Jalan/Saluran dan aturan satuan dibuat dari data tahun tertentu (`berlaku_tahun` di config).
+    Untuk tahun lain aturan itu dimatikan - bukan dipaksakan - karena pemisahan MAK dan satuan ukur bisa berbeda
+    (mis. 2023-2025 Jalan dan Saluran memakai satu MAK yang sama). Pemeriksaan lain tetap berjalan."""
+    aturan = dict(target.get("periksa") or {})
+    berlaku = aturan.get("berlaku_tahun")
+    if berlaku and target["tahun"] not in berlaku:
+        aturan.pop("mak_kategori", None)
+        aturan.pop("satuan_salah", None)
+    return aturan
 
 
 def lengkap(conn, target):
@@ -108,7 +127,8 @@ def lengkap(conn, target):
                      target.get("mak_segmen", SEGMEN_DEFAULT))
     for p in data["paket"].values():
         p["nama_paket"] = html.unescape(p["nama_paket"])   # SiRUP mengirim apostrof sebagai &#x27;
-    kegiatan.tambahkan(data, (target.get("periksa") or {}))
+    aturan_periksa = aturan_periksa_tahun(target)
+    kegiatan.tambahkan(data, aturan_periksa)
     wilayah = (target.get("lokasi") or {}).get("wilayah")
     kec = list(wilayah) if wilayah else (target.get("lokasi") or {}).get("kecamatan") or lokasi._KECAMATAN_DEFAULT
     fisik = [p for p in data["paket"].values() if p["kategori"] in ("Jalan", "Saluran") and p["jenis_pekerjaan"] == "Fisik"]
@@ -118,7 +138,7 @@ def lengkap(conn, target):
                                    kecamatan=h["kecamatan"], kelurahan=h["kelurahan"],
                                    kecamatan_asli=h["kecamatan_asli"], kelurahan_asli=h["kelurahan_asli"],
                                    lokasi_masalah=h["masalah"])
-    data["periksa"] = periksa.jalankan(data, target.get("periksa"))
+    data["periksa"] = periksa.jalankan(data, aturan_periksa)
     # penanda 'data berubah' untuk auto-refresh halaman Database
     v = conn.execute("SELECT MAX(last_seen), COUNT(*) FROM sirup_paket WHERE id_satker=? AND tahun=?",
                      (target["id_satker"], target["tahun"])).fetchone()

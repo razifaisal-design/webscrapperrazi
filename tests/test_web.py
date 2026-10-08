@@ -146,5 +146,44 @@ class TestWebTugas(unittest.TestCase):
         self.assertEqual(self.panggilan, [("daftar", 2025, 2.0)])
 
 
+class TestPerkiraanWaktu(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.p = web.PengelolaTugas(str(Path(self.tmp.name) / "x.db"))
+
+    def progres(self, waktu, selesai, total=100):
+        with mock.patch.object(web.time, "monotonic", return_value=waktu):
+            self.p._progres(selesai, total, selesai, 0)
+        return self.p.status()
+
+    def test_kecepatan_dari_jendela_30_detik_dan_sisa_waktu(self):
+        self.p._tahap_mulai = 0
+        self.progres(10, 10)                                  # 1/detik sejak awal
+        st = self.progres(20, 20)
+        self.assertAlmostEqual(st["laju"], 1.0)
+        self.assertEqual(st["sisa_detik"], 80)               # 80 tersisa / 1 per detik
+
+    def test_laju_mengikuti_kecepatan_terbaru_bukan_rata_rata_seumur_hidup(self):
+        self.p._tahap_mulai = 0
+        self.progres(10, 1)                                   # awalnya lambat
+        for t, n in ((100, 10), (110, 30)):                   # lalu 2 paket/detik di jendela terakhir
+            st = self.progres(t, n)
+        self.assertAlmostEqual(st["laju"], 2.0)
+        self.assertEqual(st["sisa_detik"], 35)                # 70 / 2
+
+    def test_selesai_sisa_nol_dan_belum_ada_data_kosong(self):
+        self.p._tahap_mulai = 0
+        self.assertIsNone(self.progres(5, 0)["sisa_detik"])
+        self.assertEqual(self.progres(50, 100)["sisa_detik"], 0)
+
+    def test_ganti_tahap_mereset_perkiraan(self):
+        self.p._tahap_mulai = 0
+        self.progres(10, 50)
+        self.p._tahap(2, 2, "Detail paket")
+        st = self.p.status()
+        self.assertEqual((st["laju"], st["sisa_detik"], st["selesai"]), (None, None, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

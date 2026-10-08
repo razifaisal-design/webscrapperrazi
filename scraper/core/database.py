@@ -9,7 +9,7 @@ EXTRA_KUNCI = [
 
 # (kunci, judul kolom) - urutan = urutan kolom CSV
 KOLOM = [
-    ("kode_rup", "Kode RUP"), ("link", "Tautan SiRUP"), ("jenis", "Penyedia/Swakelola"), ("nama_paket", "Nama Paket"),
+    ("tahun", "Tahun"), ("kode_rup", "Kode RUP"), ("link", "Tautan SiRUP"), ("jenis", "Penyedia/Swakelola"), ("nama_paket", "Nama Paket"),
     ("penyelenggara", "Penyelenggara"), ("pagu", "Pagu"), ("metode_pemilihan", "Metode Pemilihan"),
     ("sumber_dana", "Sumber Dana"), ("waktu_pemilihan", "Waktu Pemilihan"), ("uraian", "Uraian"),
     ("spesifikasi", "Spesifikasi"), ("volume", "Volume"), ("lokasi_pekerjaan", "Lokasi Pekerjaan"),
@@ -46,7 +46,7 @@ def baris(conn, target, data):
         t = turunan.get(r["kode_rup"], {})
         extra = json.loads(r["extra_json"]) if r["extra_json"] else {}
         b = {
-            "kode_rup": r["kode_rup"], "link": r["link"], "jenis": r["jenis"],
+            "tahun": r["tahun"], "kode_rup": r["kode_rup"], "link": r["link"], "jenis": r["jenis"],
             "nama_paket": html.unescape(r["nama_paket"] or ""), "penyelenggara": r["penyelenggara"],
             "pagu": r["pagu"], "metode_pemilihan": r["metode_pemilihan"], "sumber_dana": r["sumber_dana"],
             "waktu_pemilihan": r["waktu_pemilihan"], "uraian": t.get("uraian") or r["d_uraian"],
@@ -83,6 +83,7 @@ def perubahan(conn, target, batas=3000):
     hasil = []
     for r in rows:
         x = dict(r)
+        x["tahun"] = th
         x["link"] = info[r["kunci"]]["link"]
         x["pagu"] = info[r["kunci"]]["pagu"]
         if r["jenis_event"] == "REVISI_RUP":

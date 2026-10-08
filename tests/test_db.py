@@ -80,6 +80,12 @@ class TestFinalisasi(unittest.TestCase):
         jenis = sorted(e[0] for e in self.events())
         self.assertEqual(jenis, ["BARU", "REVISI_RUP"])
 
+    def test_view_gabungan_memuat_tahun_dan_status_detail(self):
+        jalankan(self.conn, [pk("1"), pk("2")])
+        self.conn.execute("INSERT INTO sirup_detail(kode_rup,volume,diambil_pada) VALUES('1','5 M2','x')")
+        baris = {r["kode_rup"]: tuple(r) for r in self.conn.execute("SELECT kode_rup, tahun, volume, ada_detail FROM v_paket_detail")}
+        self.assertEqual(baris, {"1": ("1", 2026, "5 M2", 1), "2": ("2", 2026, None, 0)})
+
     def test_migrasi_database_lama_tanpa_kolom_tautan(self):
         import sqlite3, tempfile, os
         d = tempfile.mkdtemp(); f = os.path.join(d, "lama.db")

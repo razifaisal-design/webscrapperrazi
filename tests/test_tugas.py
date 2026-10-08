@@ -33,7 +33,7 @@ class KlienPalsu:
 
 class TestParam(unittest.TestCase):
     def test_laju_dan_peringatan(self):
-        self.assertAlmostEqual(tugas.laju(1, 1.5), 1 / 1.9)
+        self.assertAlmostEqual(tugas.laju(1, 1.5), 1 / 1.65)
         self.assertIsNone(tugas.peringatan_laju(1, 1.5))
         self.assertIn("TINGGI", tugas.peringatan_laju(10, 0.3))
         self.assertIn("Sedang", tugas.peringatan_laju(3, 1.5))
@@ -94,13 +94,14 @@ class TestRunDetail(unittest.TestCase):
         self.assertEqual(self.jumlah_detail(), 5)                      # 5 tersimpan, sisanya tidak dicoba lagi
         self.assertLess(hitung["n"], 20)
         self.assertEqual(self.conn.execute("SELECT status FROM scrape_runs ORDER BY id DESC LIMIT 1").fetchone()[0], "failed")
-        self.assertNotIn("lokasi dibangun", self.log)
+        self.assertIn("lokasi dibangun", self.log)                     # yang sudah terambil tetap dimasukkan ke tabel Jalan/Gang
 
     def test_diblokir_dengan_banyak_koneksi_berhenti_total(self):
         def ambil(c, j, k):
             raise DiblokirError("HTTP 403")
         self.assertEqual(tugas.run_detail(self.conn, TARGET, koneksi=5, jeda=0.2, ambil=ambil, **self.pakai), 2)
         self.assertEqual(self.jumlah_detail(), 0)
+        self.assertNotIn("lokasi dibangun", self.log)                  # tidak ada detail sama sekali -> tidak ada yang dibangun
 
     def test_gagal_satu_paket_tidak_menghentikan_yang_lain(self):
         def ambil(c, j, k):
@@ -125,12 +126,19 @@ class TestRunDetail(unittest.TestCase):
         self.assertEqual(kode, 130)
         self.assertLess(self.jumlah_detail(), 20)
         self.assertGreaterEqual(self.jumlah_detail(), 3)
+        self.assertIn("lokasi dibangun", self.log)
 
     def test_progres_dilaporkan(self):
         p = []
         tugas.run_detail(self.conn, TARGET, koneksi=2, jeda=0.2, ambil=lambda c, j, k: detail_palsu(k),
                          progres=lambda *a: p.append(a), **self.pakai)
         self.assertEqual(p[-1], (20, 20, 20, 0))
+
+    def test_total_dilaporkan_sejak_awal_sebelum_ada_yang_selesai(self):
+        p = []
+        tugas.run_detail(self.conn, TARGET, koneksi=2, jeda=0.2, ambil=lambda c, j, k: detail_palsu(k),
+                         progres=lambda *a: p.append(a), **self.pakai)
+        self.assertEqual(p[0], (0, 20, 0, 0))
 
     def test_param_salah_ditolak(self):
         with self.assertRaises(ValueError):

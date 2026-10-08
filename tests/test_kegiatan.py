@@ -61,6 +61,14 @@ class TestJenisKegiatan(unittest.TestCase):
         self.assertEqual((x["status_mak"], x["mak_perbaikan"]), ("MAK belum dipetakan", []))
 
 
+class TestTanpaPemetaan(unittest.TestCase):
+    def test_tanpa_pemetaan_semua_dianggap_tidak_dinilai_dan_tidak_diperbaiki(self):
+        data = {"paket": {"1": p("1", "Saluran", [(J, 100)])}}
+        kegiatan.tambahkan(data, {})
+        x = data["paket"]["1"]
+        self.assertEqual((x["status_mak"], x["jenis_kegiatan"], x["mak_perbaikan"], x["mak_akhir"]), ("Tidak dinilai", "Saluran", [], [J]))
+
+
 class TestRekapPerbaikan(unittest.TestCase):
     def test_tercatat_vs_seharusnya_dan_total_tetap(self):
         d = jalankan(p("1", "Jalan", [(J, 100)]), p("2", "Saluran", [(J, 40)]), p("3", "Saluran", [(S, 60)]))

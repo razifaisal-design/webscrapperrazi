@@ -50,7 +50,10 @@
         "konsultan": "(?i)\\b(perencanaan|pengawasan|konsultan|konsultansi)\\b"
       },
       "periksa": {
-        "catatan": "mak_kategori: awalan kode MAK (sampai sub kegiatan) -> kategori yang SEHARUSNYA. Paket yang kategorinya (dari nama/uraian) beda dengan kategori MAK-nya ditandai kesalahan. satuan_salah: satuan volume yang jelas bertentangan dengan kategori. mak_baku: MAK lengkap (12 segmen) yang dipakai sebagai 'MAK Perbaikan' untuk kategori itu.",
+        "berlaku_tahun": [
+          2026
+        ],
+        "catatan": "mak_kategori: awalan kode MAK (sampai sub kegiatan) -> kategori yang SEHARUSNYA. Paket yang kategorinya (dari nama/uraian) beda dengan kategori MAK-nya ditandai kesalahan. satuan_salah: satuan volume yang jelas bertentangan dengan kategori. mak_baku: MAK lengkap (12 segmen) yang dipakai sebagai 'MAK Perbaikan' untuk kategori itu. berlaku_tahun: pemetaan MAK & aturan satuan dibuat dari data 2026 (MAK Jalan ...0012 dan Saluran ...0011 baru dipisah di 2026; di 2023-2025 keduanya memakai satu MAK ...0002 dan Saluran boleh bersatuan M2) sehingga pemeriksaan 'salah MAK' dan 'satuan' dimatikan untuk tahun lain. Untuk mengaktifkannya di tahun lain, tambahkan tahun itu ke berlaku_tahun atau buat bagian per_tahun.",
         "mak_kategori": [
           {
             "awalan": "1.04.05.2.01.0012",

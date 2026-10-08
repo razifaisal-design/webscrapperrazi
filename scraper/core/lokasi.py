@@ -65,13 +65,17 @@ def _cocokkan(raw, daftar):
     return (terbaik, True) if skor >= AMBANG else (None, False)
 
 
-def _cari_kelurahan(kata, daftar):
-    """Dari kata-kata setelah 'Kel.': awalan terpanjang yang cocok persis dengan nama resmi; bila tak ada, yang paling mirip.
+def _cari_awalan(kata, daftar, maks_kata=5):
+    """Cocokkan AWAL rangkaian kata dengan daftar nama resmi (kata sisa setelah nama, mis. 'Kota Pontianak', diabaikan).
+    Urutan: (1) persis, abaikan spasi/huruf besar -> awalan terpanjang; (2) paling mirip (salah ketik);
+    (3) singkatan: semua kata termuat di tepat satu nama resmi ('Mayor' -> 'Parit Mayor').
     -> (resmi | None, teks_tertulis, salah_eja)"""
+    kata = kata[:maks_kata]
     peta = {kunci(d): d for d in daftar}
     for n in range(len(kata), 0, -1):
-        if kunci(" ".join(kata[:n])) in peta:
-            return peta[kunci(" ".join(kata[:n]))], " ".join(kata[:n]), False
+        k = kunci(" ".join(kata[:n]))
+        if k in peta:
+            return peta[k], " ".join(kata[:n]), False
     terbaik = (None, "", 0.0)
     for n in range(1, len(kata) + 1):
         tulis = " ".join(kata[:n])
@@ -81,7 +85,17 @@ def _cari_kelurahan(kata, daftar):
                 terbaik = (d, tulis, r)
     if terbaik[2] >= AMBANG:
         return terbaik[0], terbaik[1], True
-    return None, _bersih_kelurahan(" ".join(kata)), False
+    for n in range(min(len(kata), 3), 0, -1):
+        himpunan = {x.lower() for x in kata[:n]}
+        cocok = [d for d in daftar if himpunan <= {w.lower() for w in d.split()}]
+        if len(cocok) == 1:
+            return cocok[0], " ".join(kata[:n]), True
+    return None, " ".join(kata), False
+
+
+def _cari_kelurahan(kata, daftar):
+    resmi, tulis, typo = _cari_awalan(kata, daftar)
+    return (resmi, tulis, typo) if resmi else (None, _bersih_kelurahan(" ".join(kata)), False)
 
 
 def _cari_kecamatan(s, daftar):
@@ -89,8 +103,8 @@ def _cari_kecamatan(s, daftar):
     m = _KEC_PENANDA.search(s)
     if m:
         raw = _bersih(re.sub(r"\d+", " ", m.group("n")))
-        resmi, typo = _cocokkan(raw, daftar)
-        return resmi, raw, typo, True
+        resmi, tulis, typo = _cari_awalan(re.findall(r"[A-Za-z']+", raw), daftar, maks_kata=4)
+        return resmi, (tulis if resmi else raw), typo, True
     for nm in daftar:                                  # tanpa 'Kec.': cari nama resminya di mana saja
         mm = re.search(r"\b" + r"\s+".join(map(re.escape, nm.split())) + r"\b", s, re.I)
         if mm:
@@ -214,8 +228,87 @@ def bangun(paket_fisik, kecamatan=_KECAMATAN_DEFAULT, wilayah=None):
     nama_jalan = {x["_k"]: x["nama"] for x in jalan}
     gang = sorted(
         ({"nama": ("Gg. " if x["tipe"] == "Gang" else "Komp. ") + _tampil(x["varian"]), "tipe": x["tipe"],
-          "jalan": nama_jalan[x["jalan_kunci"]], **_ringkas(x)} for x in g.values()),
+          "jalan": nama_jalan[x["jalan_kunci"]], "jalan_kunci": x["jalan_kunci"], "kunci": "|".join(gk), **_ringkas(x)}
+         for gk, x in g.items()),
         key=lambda x: (x["jalan"], x["nama"]))
     for x in jalan:
-        del x["_k"]
+        x["kunci"] = x.pop("_k")
     return {"per_paket": per_paket, "jalan": jalan, "gang": gang, "tidak_terbaca": tidak}
+
+
+def gabung_jalan(per_tahun):
+    """Daftar jalan UNIK lintas tahun (tanpa duplikat). per_tahun = {tahun: hasil bangun()}.
+    Jalan yang sama (kunci sama, abaikan spasi/titik/huruf besar) di beberapa tahun menjadi satu baris."""
+    hasil = {}
+    for th in sorted(per_tahun):
+        L = per_tahun[th]
+        gang_jalan = defaultdict(list)
+        for g in L["gang"]:
+            gang_jalan[g["jalan_kunci"]].append(g)
+        for j in L["jalan"]:
+            r = hasil.setdefault(j["kunci"], {"nama": Counter(), "variasi": set(), "kecamatan": Counter(), "jenis": Counter(),
+                                              "per_tahun": {}, "gang": {}, "paket": 0, "pagu": 0})
+            r["nama"][j["nama"]] += j["jumlah_paket"]
+            r["variasi"].update(j["variasi"])
+            for kc in j["kecamatan"]:
+                r["kecamatan"][kc] += 1
+            r["jenis"].update(j["jenis"])
+            r["paket"] += j["jumlah_paket"]
+            r["pagu"] += j["total_pagu"]
+            gg = gang_jalan.get(j["kunci"], [])
+            r["per_tahun"][str(th)] = {"paket": j["jumlah_paket"], "pagu": j["total_pagu"], "gang": len(gg)}
+            for g in gg:
+                e = r["gang"].setdefault(g["kunci"], {"nama": g["nama"], "tipe": g["tipe"], "tahun": []})
+                e["tahun"].append(th)
+    daftar = []
+    for k, r in hasil.items():
+        tampil = r["nama"].most_common(1)[0][0]
+        daftar.append({
+            "kunci": k, "nama": tampil,
+            "variasi": sorted((r["variasi"] | set(r["nama"])) - {tampil}),
+            "kecamatan": [kc for kc, _ in r["kecamatan"].most_common()],
+            "tahun": sorted(int(t) for t in r["per_tahun"]), "per_tahun": r["per_tahun"],
+            "jumlah_paket": r["paket"], "total_pagu": r["pagu"], "jenis": dict(r["jenis"]),
+            "jumlah_gang": len(r["gang"]), "gang": sorted(r["gang"].values(), key=lambda g: g["nama"])})
+    return sorted(daftar, key=lambda x: x["nama"].lower())
+
+
+def gabung_gang(per_tahun):
+    """Daftar gang/komplek UNIK lintas tahun. Identitas = jalan + tipe + nama gang (abaikan spasi/titik/huruf besar).
+    Gang bernama sama di jalan berbeda adalah tempat berbeda, jadi tidak digabung."""
+    nama_jalan = Counter()
+    hasil = {}
+    for th in sorted(per_tahun):
+        L = per_tahun[th]
+        for j in L["jalan"]:
+            nama_jalan[(j["kunci"], j["nama"])] += j["jumlah_paket"]
+        for g in L["gang"]:
+            r = hasil.setdefault(g["kunci"], {"nama": Counter(), "variasi": set(), "kecamatan": Counter(), "jenis": Counter(),
+                                              "per_tahun": {}, "tipe": g["tipe"], "jalan_kunci": g["jalan_kunci"],
+                                              "paket": 0, "pagu": 0})
+            r["nama"][g["nama"]] += g["jumlah_paket"]
+            r["variasi"].update(g["variasi"])
+            for kc in g["kecamatan"]:
+                r["kecamatan"][kc] += 1
+            r["jenis"].update(g["jenis"])
+            r["per_tahun"][str(th)] = {"paket": g["jumlah_paket"], "pagu": g["total_pagu"]}
+            r["paket"] += g["jumlah_paket"]
+            r["pagu"] += g["total_pagu"]
+    terbaik = {}
+    for (k, nm), n in nama_jalan.items():
+        if k not in terbaik or n > terbaik[k][1]:
+            terbaik[k] = (nm, n)
+    pemakai = defaultdict(set)                       # nama gang (tanpa jalan) -> jalan-jalan yang memakainya
+    for k, r in hasil.items():
+        pemakai[k.split("|")[2]].add(r["jalan_kunci"])
+    daftar = []
+    for k, r in hasil.items():
+        tampil = r["nama"].most_common(1)[0][0]
+        daftar.append({
+            "kunci": k, "nama": tampil, "tipe": r["tipe"], "jalan": terbaik[r["jalan_kunci"]][0],
+            "variasi": sorted((r["variasi"] | set(r["nama"])) - {tampil}),
+            "kecamatan": [kc for kc, _ in r["kecamatan"].most_common()],
+            "tahun": sorted(int(t) for t in r["per_tahun"]), "per_tahun": r["per_tahun"],
+            "jumlah_paket": r["paket"], "total_pagu": r["pagu"], "jenis": dict(r["jenis"]),
+            "nama_sama_di_jalan_lain": len(pemakai[k.split("|")[2]]) - 1})
+    return sorted(daftar, key=lambda x: (x["jalan"].lower(), x["nama"].lower()))

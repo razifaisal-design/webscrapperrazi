@@ -14,7 +14,7 @@ from .sources import sirup, sirup_detail
 
 ROOT = Path(__file__).resolve().parents[1]
 KONEKSI_MAKS, JEDA_MIN = 10, 0.2
-WAKTU_PERMINTAAN = 0.4            # perkiraan lama satu permintaan (detik), di luar jeda
+WAKTU_PERMINTAAN = 0.15           # lama satu permintaan (detik) di luar jeda; diukur: 3 koneksi + jeda 1 dtk = 2,6 paket/dtk
 
 
 def csv_path(target):
@@ -56,6 +56,22 @@ def bangun_lokasi(conn, target, db_path, log=print):
         log(f"Nama jalan TIDAK terbaca pada {len(data['lokasi']['tidak_terbaca'])} paket: {', '.join(data['lokasi']['tidak_terbaca'][:10])}")
     log(f"DB  : {db_path}")
     log(f"CSV : {ekspor_lengkap(conn, target)}")
+
+
+def _bangun_sebagian(conn, target, db_path, log):
+    """Walau berhenti di tengah, detail yang sudah terambil langsung dimasukkan ke tabel Jalan/Gang tahun itu."""
+    try:
+        if ok_ada_detail(conn, target):
+            log("Membangun database Nama Jalan & Nama Gang dari detail yang sudah terambil ...")
+            bangun_lokasi(conn, target, db_path, log)
+    except Exception as e:          # jangan sampai kegagalan di sini menutupi hasil utama
+        log(f"(database Jalan/Gang belum diperbarui: {e!r})")
+
+
+def ok_ada_detail(conn, target):
+    return conn.execute(
+        "SELECT 1 FROM sirup_detail d JOIN sirup_paket p ON p.kode_rup=d.kode_rup "
+        "WHERE p.id_satker=? AND p.tahun=? AND d.error IS NULL LIMIT 1", (target["id_satker"], target["tahun"])).fetchone() is not None
 
 
 # ======================= daftar RUP =======================
@@ -134,6 +150,8 @@ def run_detail(conn, target, koneksi=1, jeda=1.5, usia_hari=7, semua=False, limi
     if peringatan:
         log(f"PERINGATAN laju: {peringatan}")
     run_id = db.mulai_run(conn, target["id_satker"], target["tahun"], sumber="SIRUP_DETAIL")
+    if progres:
+        progres(0, len(antre), 0, 0)             # total diketahui sejak awal (untuk bilah progres & perkiraan waktu)
     lokal, klien = threading.local(), []
 
     blok = []
@@ -203,10 +221,12 @@ def run_detail(conn, target, koneksi=1, jeda=1.5, usia_hari=7, semua=False, limi
     if diblokir:
         db.tutup_run(conn, run_id, "failed", ok, len(antre), str(diblokir))
         log(f"[BERHENTI] {diblokir} - semua koneksi dihentikan; yang sudah diambil ({ok}) tetap tersimpan.")
+        _bangun_sebagian(conn, target, db_path, log)
         return 2
     if berhenti.is_set() and selesai < len(antre):
         db.tutup_run(conn, run_id, "failed", ok, len(antre), "dihentikan pengguna")
         log(f"Dihentikan. {ok} detail tersimpan; jalankan lagi untuk melanjutkan.")
+        _bangun_sebagian(conn, target, db_path, log)
         return 130
     db.tutup_run(conn, run_id, "success" if not gagal else "invalid", ok, len(antre),
                  "; ".join(f"{k}: {m}" for k, m in gagal[:20]) or None)

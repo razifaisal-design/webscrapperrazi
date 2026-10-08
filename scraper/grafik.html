@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grafik Pagu</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1b2430; --muted: #66707d; --line: #e2e6eb; --accent: #1f5fbf;
+    --s1: #1f5fbf; --s2: #e08a1e; --s3: #1a9d6b; --s4: #8e4ec6; --s5: #d64550; --s6: #0e7490; --s7: #7a8794; --s8: #b8860b;
+    --jalan: #c2610c; --jalan-t: #f0b270; --saluran: #0e7490; --saluran-t: #7fcfe0; --lain: #8a94a1;
+    --warn: #b45309; --warn-soft: #fdf1dc; --ok: #1a7f4b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161c; --card: #1a2029; --text: #e6e9ee; --muted: #93a0af; --line: #2a323d; --accent: #6aa3f5;
+      --s1: #6aa3f5; --s2: #f0a64a; --s3: #4cc795; --s4: #b78be0; --s5: #f07a84; --s6: #4fc3dc; --s7: #a3adba; --s8: #e0b64a;
+      --jalan: #f0a64a; --jalan-t: #7a5320; --saluran: #4fc3dc; --saluran-t: #1f5868; --lain: #7a8794;
+      --warn: #f0b35a; --warn-soft: #3a2c14; --ok: #5fcf93;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 56px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; } h2 { font-size: 16px; margin: 0; }
+  .sub { color: var(--muted); font-size: 12.5px; }
+  .btn { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn:hover { border-color: var(--accent); } .btn.kecil { padding: 3px 9px; font-size: 12.5px; }
+  .btn.aktif { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; background: var(--warn-soft); color: var(--warn); }
+  nav.daftar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  nav.daftar a { font-size: 12.5px; color: var(--accent); text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 99px; padding: 2px 10px; }
+  .bagian { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 26px 0 8px; }
+  .kartu { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 12px; margin-bottom: 14px; }
+  .kepala { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .aksi { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .plot { margin-top: 8px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--muted); font: 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  svg text.nilai { fill: var(--text); font-weight: 600; font-size: 11px; }
+  svg .grid { stroke: var(--line); stroke-width: 1; } svg .sumbu { stroke: var(--muted); stroke-width: 1; }
+  svg rect.b { transition: opacity .15s; } svg rect.b:hover { opacity: .78; }
+  .legenda { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; font-size: 12.5px; }
+  .legenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .legenda i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .tbl { overflow-x: auto; margin-top: 10px; } .tbl[hidden] { display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; } th { color: var(--muted); font-weight: 600; }
+  #tip { position: fixed; z-index: 10; pointer-events: none; background: #111a26; color: #fff; padding: 6px 9px; border-radius: 7px; font-size: 12px; line-height: 1.4; max-width: 280px; white-space: pre-line; opacity: 0; transition: opacity .1s; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  #tip.on { opacity: 1; }
+  .kosong { padding: 40px; text-align: center; color: var(--muted); }
+  @media print { .ctl, nav.daftar, .aksi { display: none; } body { background: #fff; } .kartu { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Grafik Pagu</h1><div class="sub" id="sub">Memuat…</div></div>
+    <div class="ctl">
+      <a class="btn" href="/">← Dashboard</a>
+      <button class="btn" id="muat">Muat ulang</button>
+      <button class="btn" id="semuaCsv">Unduh semua data (CSV)</button>
+      <button class="btn" onclick="window.print()">Cetak</button>
+    </div>
+  </header>
+  <div id="catatan"></div>
+  <nav class="daftar" id="daftar"></nav>
+  <main id="isi"><div class="kosong">Memuat grafik…</div></main>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+/* ======================= util ======================= */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const nf = new Intl.NumberFormat("id-ID");
+const rpFull = (n) => "Rp " + nf.format(Math.round(n || 0));
+function rpRingkas(n) {
+  n = n || 0; const a = Math.abs(n);
+  const t = (x, s) => "Rp " + x.toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " " + s;
+  return a >= 1e12 ? t(n / 1e12, "T") : a >= 1e9 ? t(n / 1e9, "M") : a >= 1e6 ? t(n / 1e6, "jt") : rpFull(n);
+}
+const pct = (a, b) => (b ? (a * 100 / b).toFixed(1).replace(".", ",") + "%" : "–");
+const SERI = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)", "var(--s6)", "var(--s7)", "var(--s8)"];
+
+/* ======================= mini-chart SVG (batang: kelompok / tumpuk, tegak / mendatar) ======================= */
+function langkahBagus(maks, n = 5) {
+  const kasar = maks / n, p = Math.pow(10, Math.floor(Math.log10(kasar || 1))), f = kasar / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+}
+function baris2(teks, maks = 13) {
+  if (teks.length <= maks || !teks.includes(" ")) return [teks];
+  const t = teks.split(" "); let terbaik = 1, selisih = 1e9;
+  for (let i = 1; i < t.length; i++) { const d = Math.abs(t.slice(0, i).join(" ").length - t.slice(i).join(" ").length); if (d < selisih) { selisih = d; terbaik = i; } }
+  return [t.slice(0, terbaik).join(" "), t.slice(terbaik).join(" ")];
+}
+function batang(sp, lebar = 860) {
+  const { kategori, seri, tumpuk = false, horizontal = false, rupiah = true, judul = "" } = sp;
+  const n = kategori.length, m = seri.length;
+  const nilai = (s, i) => Number(s.nilai[i]) || 0;
+  const jumlah = (i) => seri.reduce((a, s) => a + nilai(s, i), 0);
+  const maks = Math.max(1, ...(tumpuk ? kategori.map((_, i) => jumlah(i)) : seri.flatMap((s) => kategori.map((_, i) => nilai(s, i)))));
+  const langkah = langkahBagus(maks), atas = Math.ceil(maks / langkah) * langkah;
+  const ticks = []; for (let v = 0; v <= atas + 1e-9; v += langkah) ticks.push(v);
+  const bagi = !rupiah ? 1 : atas >= 1e12 ? 1e12 : atas >= 1e9 ? 1e9 : atas >= 1e6 ? 1e6 : 1;
+  const satuan = !rupiah ? "" : bagi === 1e12 ? "triliun" : bagi === 1e9 ? "miliar" : bagi === 1e6 ? "juta" : "rupiah";
+  const labelTick = (v) => (v / bagi).toLocaleString("id-ID", { maximumFractionDigits: 1 });
+  const nilaiTeks = (v) => (rupiah ? rpRingkas(v) : nf.format(v));
+  const tip = (s, i, v) => esc(`${s.nama} — ${kategori[i]}\n${rupiah ? rpFull(v) + "\n≈ " + rpRingkas(v) : nf.format(v)}` + (tumpuk && m > 1 ? `\nTotal kolom: ${nilaiTeks(jumlah(i))}` : ""));
+  let svg = "", W = Math.max(340, Math.min(860, lebar)), H, L, R = 18, T = 26, B;
+  if (!horizontal) {
+    H = 340; L = W < 520 ? 52 : 66; B = 56;
+    const pw = W - L - R, ph = H - T - B, bw = pw / n, dalam = Math.min(bw * 0.78, tumpuk ? 96 : 150);
+    const y = (v) => T + ph - (v / atas) * ph;
+    svg += `<text x="4" y="${T - 10}">${satuan ? "dalam " + satuan : ""}</text>`;
+    ticks.forEach((v) => { svg += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${labelTick(v)}</text>`; });
+    svg += `<line class="sumbu" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>`;
+    kategori.forEach((kt, i) => {
+      const x0 = L + i * bw + (bw - dalam) / 2;
+      if (tumpuk) {
+        let kum = 0;
+        seri.forEach((s) => { const v = nilai(s, i); if (v <= 0) return; const y1 = y(kum + v), y0 = y(kum); kum += v;
+          svg += `<rect class="b" x="${x0}" y="${y1}" width="${dalam}" height="${Math.max(0.5, y0 - y1)}" rx="2" style="fill:${s.warna}" data-tip="${tip(s, i, v)}"/>`; });
+        if (kum > 0 && n <= 9) svg += `<text class="nilai" x="${x0 + dalam / 2}" y="${y(kum) - 5}" text-anchor="middle">${nilaiTeks(kum)}</text>`;
+      } else {
+        const lb = dalam / m;
+        seri.forEach((s, j) => { const v = nilai(s, i), y1 = y(v);
+          svg += `<rect class="b" x="${x0 + j * lb + 1}" y="${y1}" width="${Math.max(3, lb - 2)}" height="${Math.max(0, y(0) - y1)}" rx="2" style="fill:${s.warna}" data-tip="${tip(s, i, v)}"/>`;
+          if (lb >= 44 && v > 0) svg += `<text class="nilai" x="${x0 + j * lb + lb / 2}" y="${y1 - 4}" text-anchor="middle">${nilaiTeks(v)}</text>`; });
+      }
+      baris2(kt).forEach((t, k) => { svg += `<text x="${L + i * bw + bw / 2}" y="${y(0) + 16 + k * 13}" text-anchor="middle">${esc(t)}</text>`; });
+    });
+  } else {
+    const rh = tumpuk ? 30 : 12 * m + 14; L = Math.min(196, Math.round(W * 0.4)); B = 34; H = T + n * rh + B;
+    const pw = W - L - R - (W < 520 ? 56 : 70), x = (v) => L + (v / atas) * pw;
+    svg += `<text x="${L}" y="${T - 10}">${satuan ? "dalam " + satuan : ""}</text>`;
+    ticks.forEach((v) => { svg += `<line class="grid" x1="${x(v)}" x2="${x(v)}" y1="${T}" y2="${T + n * rh}"/><text x="${x(v)}" y="${T + n * rh + 16}" text-anchor="middle">${labelTick(v)}</text>`; });
+    svg += `<line class="sumbu" x1="${L}" x2="${L}" y1="${T}" y2="${T + n * rh}"/>`;
+    kategori.forEach((kt, i) => {
+      const y0 = T + i * rh + 4, tinggi = rh - 8;
+      svg += `<text x="${L - 8}" y="${y0 + (tumpuk ? tinggi / 2 : (tinggi) / 2) + 4}" text-anchor="end">${esc(kt.length > (W < 520 ? 20 : 30) ? kt.slice(0, W < 520 ? 19 : 29) + "…" : kt)}</text>`;
+      if (tumpuk) {
+        let kum = 0;
+        seri.forEach((s) => { const v = nilai(s, i); if (v <= 0) return;
+          svg += `<rect class="b" x="${x(kum)}" y="${y0}" width="${Math.max(0.5, x(kum + v) - x(kum))}" height="${tinggi}" rx="2" style="fill:${s.warna}" data-tip="${tip(s, i, v)}"/>`; kum += v; });
+        svg += `<text class="nilai" x="${x(kum) + 6}" y="${y0 + tinggi / 2 + 4}">${nilaiTeks(kum)}</text>`;
+      } else {
+        const tb = tinggi / m;
+        seri.forEach((s, j) => { const v = nilai(s, i);
+          svg += `<rect class="b" x="${L}" y="${y0 + j * tb}" width="${Math.max(0, x(v) - L)}" height="${Math.max(2, tb - 2)}" rx="2" style="fill:${s.warna}" data-tip="${tip(s, i, v)}"/>`; });
+      }
+    });
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(judul)}">${svg}</svg>` +
+    `<div class="legenda">${seri.map((s) => `<span><i style="background:${s.warna}"></i>${esc(s.nama)}</span>`).join("")}</div>`;
+}
+
+/* ======================= tooltip ======================= */
+const tipEl = $("tip");
+document.addEventListener("mousemove", (e) => {
+  const r = e.target.closest && e.target.closest("rect[data-tip]");
+  if (!r) { tipEl.classList.remove("on"); return; }
+  tipEl.textContent = r.getAttribute("data-tip");
+  tipEl.classList.add("on");
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  tipEl.style.left = Math.min(innerWidth - w - 8, e.clientX + 14) + "px";
+  tipEl.style.top = Math.max(8, Math.min(innerHeight - h - 8, e.clientY + 14)) + "px";
+});
+
+/* ======================= data → grafik ======================= */
+let D = null;
+const MODE = {};            // mode tampilan grafik per kecamatan
+const TABEL = {};           // data tabel tiap grafik (untuk tabel & CSV)
+const label = (th) => { const i = D.tahun_info.find((x) => x.tahun === th); return String(th) + (i && !i.lengkap ? "*" : ""); };
+const S = (th) => D.per_tahun[String(th)];
+
+function daftarGrafik() {
+  const th = D.tahun, namaTh = th.map(label);
+  const per = (f) => th.map((t) => f(S(t)));
+  const sumber = (kunci, maksSeri = 6) => {            // metode / sumber dana: top-N keseluruhan + Lainnya
+    const total = {}; th.forEach((t) => Object.entries(S(t)[kunci]).forEach(([k, v]) => total[k] = (total[k] || 0) + v));
+    const top = Object.entries(total).sort((a, b) => b[1] - a[1]).slice(0, maksSeri).map(([k]) => k);
+    const seri = top.map((k, i) => ({ nama: k, warna: SERI[i], nilai: per((s) => s[kunci][k] || 0) }));
+    seri.push({ nama: "Lainnya", warna: "var(--lain)", nilai: per((s) => Object.entries(s[kunci]).filter(([k]) => !top.includes(k)).reduce((a, [, v]) => a + v, 0)) });
+    return seri.filter((s) => s.nilai.some((v) => v > 0));
+  };
+  const kecGrafik = (kunci, namaKat, warna) => {
+    const kecs = D.kecamatan.filter((k) => th.some((t) => (S(t).kecamatan[k] || {})[kunci] > 0));
+    const nilai = (t, k) => (S(t).kecamatan[k] || {})[kunci] || 0;
+    return { kecamatan: true, judul: `${namaKat} per kecamatan, setiap tahun`,
+      deskripsi: `Pagu ${namaKat.toLowerCase()} (fisik + konsultan) menurut kecamatan yang tertulis di nama paket.`,
+      bangun: (mode) => mode === "tahun"
+        ? { kategori: namaTh, tumpuk: true, seri: kecs.map((k, i) => ({ nama: k, warna: SERI[i % SERI.length], nilai: th.map((t) => nilai(t, k)) })) }
+        : { kategori: kecs, seri: th.map((t, i) => ({ nama: label(t), warna: SERI[i % SERI.length], nilai: kecs.map((k) => nilai(t, k)) })) } };
+  };
+  return [
+    { bagian: "Pagu per tahun" },
+    { id: "dinas", judul: "Pagu total Dinas per tahun", deskripsi: "Seluruh paket RUP dinas (penyedia + swakelola), pagu dari daftar SiRUP.",
+      bangun: () => ({ kategori: namaTh, seri: [{ nama: "Pagu seluruh paket", warna: "var(--s1)", nilai: per((s) => s.pagu_dinas) }] }),
+      ekstra: [["Jumlah paket", () => per((s) => s.paket), false]] },
+    { id: "jalan", judul: "Pagu Jalan per tahun", deskripsi: "Pekerjaan jalan: fisik (Belanja Modal Jalan Kota) dan konsultan (perencanaan/pengawasan jalan).",
+      bangun: () => ({ kategori: namaTh, tumpuk: true, seri: [{ nama: "Fisik", warna: "var(--jalan)", nilai: per((s) => s.jalan.fisik) }, { nama: "Konsultan", warna: "var(--jalan-t)", nilai: per((s) => s.jalan.konsultan) }] }) },
+    { id: "saluran", judul: "Pagu Saluran per tahun", deskripsi: "Pekerjaan saluran: fisik (Belanja Modal Saluran Pembuang) dan konsultan.",
+      bangun: () => ({ kategori: namaTh, tumpuk: true, seri: [{ nama: "Fisik", warna: "var(--saluran)", nilai: per((s) => s.saluran.fisik) }, { nama: "Konsultan", warna: "var(--saluran-t)", nilai: per((s) => s.saluran.konsultan) }] }) },
+    { id: "js", judul: "Pagu total Jalan + Saluran per tahun", deskripsi: "Jumlah pagu Jalan dan Saluran; tabel menunjukkan persentase dari pagu seluruh dinas.",
+      bangun: () => ({ kategori: namaTh, tumpuk: true, seri: [{ nama: "Jalan", warna: "var(--jalan)", nilai: per((s) => s.jalan.total) }, { nama: "Saluran", warna: "var(--saluran)", nilai: per((s) => s.saluran.total) }] }),
+      ekstra: [["% dari pagu dinas", () => per((s) => pct(s.jalan_saluran, s.pagu_dinas)), true]] },
+    { id: "komposisi", judul: "Komposisi pagu Dinas per tahun", deskripsi: "Seluruh pagu dinas: Jalan, Saluran, dan sisanya (administrasi, ATK, rapat, konsultan lain, dll.).",
+      bangun: () => ({ kategori: namaTh, tumpuk: true, seri: [{ nama: "Jalan", warna: "var(--jalan)", nilai: per((s) => s.jalan.total) }, { nama: "Saluran", warna: "var(--saluran)", nilai: per((s) => s.saluran.total) }, { nama: "Lainnya", warna: "var(--lain)", nilai: per((s) => s.lainnya.total) }] }) },
+    { bagian: "Per kecamatan" },
+    { id: "kec-jalan", ...kecGrafik("jalan", "Jalan") },
+    { id: "kec-saluran", ...kecGrafik("saluran", "Saluran") },
+    { id: "kec-total", ...kecGrafik("total", "Total Jalan + Saluran") },
+    { bagian: "Grafik penting lainnya" },
+    { id: "paket", judul: "Jumlah paket per tahun", deskripsi: "Banyaknya paket RUP, dipisah menurut jenis pekerjaan.", rupiah: false,
+      bangun: () => ({ rupiah: false, kategori: namaTh, tumpuk: true, seri: [{ nama: "Jalan", warna: "var(--jalan)", nilai: per((s) => s.jalan.paket) }, { nama: "Saluran", warna: "var(--saluran)", nilai: per((s) => s.saluran.paket) }, { nama: "Lainnya", warna: "var(--lain)", nilai: per((s) => s.lainnya.paket) }] }) },
+    { id: "metode", judul: "Pagu per metode pemilihan", deskripsi: "Cara pengadaan (E-Purchasing, Pengadaan Langsung, Tender, dll.) — enam metode terbesar.",
+      bangun: () => ({ kategori: namaTh, tumpuk: true, seri: sumber("metode") }) },
+    { id: "dana", judul: "Pagu per sumber dana", deskripsi: "APBD, APBD-P, dan sumber lain.",
+      bangun: () => ({ kategori: namaTh, tumpuk: true, seri: sumber("sumber_dana", 5) }) },
+    { id: "unik", judul: "Jalan dan gang yang dikerjakan per tahun", deskripsi: "Jumlah jalan dan gang/komplek unik pada paket fisik (tanpa duplikat dalam satu tahun).", rupiah: false,
+      bangun: () => ({ rupiah: false, kategori: namaTh, seri: [{ nama: "Jalan unik", warna: "var(--s3)", nilai: per((s) => s.jalan_unik) }, { nama: "Gang/komplek unik", warna: "var(--s4)", nilai: per((s) => s.gang_unik) }] }) },
+    { id: "top", judul: "10 jalan dengan pagu terbesar (semua tahun)", deskripsi: "Akumulasi pagu seluruh tahun yang ada di database, dipecah per tahun.",
+      bangun: () => ({ horizontal: true, tumpuk: true, kategori: D.top_jalan.map((j) => j.nama), seri: th.map((t, i) => ({ nama: label(t), warna: SERI[i % SERI.length], nilai: D.top_jalan.map((j) => j.per_tahun[String(t)] || 0) })) }) },
+  ];
+}
+
+/* ======================= render ======================= */
+function tabelHTML(t, rupiah) {
+  return `<table><thead><tr>${t.kolom.map((k, i) => `<th>${esc(k)}</th>`).join("")}</tr></thead><tbody>${t.baris.map((r) => `<tr>${r.map((v, i) => `<td>${i === 0 ? esc(v) : typeof v === "number" ? (rupiah ? rpFull(v) : nf.format(v)) : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+function susunTabel(sp, g) {
+  const rupiah = sp.rupiah !== false, kolom = [sp.horizontal ? "Jalan" : (g.kecamatan && MODE[g.id] !== "tahun" ? "Kecamatan" : "Tahun")];
+  kolom.push(...sp.seri.map((s) => s.nama)); if (sp.tumpuk && sp.seri.length > 1) kolom.push("Total");
+  const baris = sp.kategori.map((kt, i) => {
+    const r = [kt, ...sp.seri.map((s) => Number(s.nilai[i]) || 0)];
+    if (sp.tumpuk && sp.seri.length > 1) r.push(sp.seri.reduce((a, s) => a + (Number(s.nilai[i]) || 0), 0));
+    (g.ekstra || []).forEach(([nm, fn]) => { if (!kolom.includes(nm)) kolom.push(nm); r.push(fn()[i]); });
+    return r;
+  });
+  if (g.kecamatan && MODE[g.id] !== "tahun") {}   // baris = kecamatan, kolom = tahun
+  return { kolom, baris, rupiah };
+}
+function gambarKartu(g) {
+  const sp = g.bangun(MODE[g.id]); sp.judul = g.judul;
+  if (sp.rupiah === undefined && g.rupiah === false) sp.rupiah = false;
+  const t = susunTabel(sp, g); TABEL[g.id] = { judul: g.judul, ...t };
+  $("p-" + g.id).innerHTML = sp.kategori.length ? batang(sp, Math.round($("p-" + g.id).clientWidth || 860)) : `<div class="kosong">Belum ada data.</div>`;
+  $("t-" + g.id).innerHTML = tabelHTML(t, t.rupiah);
+}
+function render() {
+  const catatan = D.tahun_info.filter((i) => !i.lengkap && i.paket);
+  $("sub").textContent = `${D.target.satker_nama} · ${D.target.klpd_nama} · tahun ${D.tahun.map(label).join(", ")}`;
+  $("catatan").innerHTML = catatan.length ? `<div class="note">* Tahun ${catatan.map((i) => `${i.tahun} (detail ${nf.format(i.detail)}/${nf.format(i.paket)})`).join(", ")} detailnya belum lengkap. Pengelompokan Jalan/Saluran/kecamatan memakai nama paket (uraian dipakai bila ada), jadi bisa sedikit kurang akurat. Lengkapi lewat dashboard → Ambil data…</div>` : "";
+  if (!D.tahun.length) { $("isi").innerHTML = `<div class="kosong">Belum ada data di database. Jalankan Ambil Data SiRUP dulu.</div>`; return; }
+  const G = daftarGrafik(); let h = "", nav = "";
+  G.forEach((g) => {
+    if (g.bagian) { h += `<div class="bagian">${esc(g.bagian)}</div>`; return; }
+    if (g.kecamatan && !MODE[g.id]) MODE[g.id] = "kecamatan";
+    nav += `<a href="#g-${g.id}">${esc(g.judul.replace(/ per kecamatan, setiap tahun/, " / kecamatan"))}</a>`;
+    h += `<section class="kartu" id="g-${g.id}"><div class="kepala"><div><h2>${esc(g.judul)}</h2><div class="sub">${esc(g.deskripsi)}</div></div>
+      <div class="aksi">${g.kecamatan ? `<span data-mode="${g.id}"><button class="btn kecil" data-m="kecamatan">Kelompok: kecamatan</button><button class="btn kecil" data-m="tahun">Kelompok: tahun</button></span>` : ""}
+      <button class="btn kecil" data-tabel="${g.id}">Tabel</button><button class="btn kecil" data-csv="${g.id}">CSV</button></div></div>
+      <div class="plot" id="p-${g.id}"></div><div class="tbl" id="t-${g.id}" hidden></div></section>`;
+  });
+  $("isi").innerHTML = h; $("daftar").innerHTML = nav;
+  G.filter((g) => g.id).forEach((g) => { window.__g = window.__g || {}; window.__g[g.id] = g; gambarKartu(g); });
+  tandaMode();
+}
+function tandaMode() { document.querySelectorAll("[data-mode]").forEach((el) => el.querySelectorAll("button").forEach((b) => b.classList.toggle("aktif", MODE[el.dataset.mode] === b.dataset.m))); }
+
+document.addEventListener("click", (e) => {
+  const m = e.target.closest("[data-m]");
+  if (m) { const id = m.parentElement.dataset.mode; MODE[id] = m.dataset.m; gambarKartu(window.__g[id]); tandaMode(); return; }
+  const tb = e.target.closest("[data-tabel]"); if (tb) { const el = $("t-" + tb.dataset.tabel); el.hidden = !el.hidden; tb.classList.toggle("aktif", !el.hidden); return; }
+  const cs = e.target.closest("[data-csv]"); if (cs) { unduh(csvTabel([cs.dataset.csv]), `grafik_${cs.dataset.csv}.csv`); }
+});
+function csvTabel(ids) {
+  const c = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  return ids.map((id) => { const t = TABEL[id]; return [c(t.judul), t.kolom.map(c).join(","), ...t.baris.map((r) => r.map(c).join(","))].join("\r\n"); }).join("\r\n\r\n");
+}
+function unduh(teks, nama) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + teks], { type: "text/csv;charset=utf-8" })); a.download = nama; a.click(); URL.revokeObjectURL(a.href);
+}
+$("semuaCsv").addEventListener("click", () => unduh(csvTabel(Object.keys(TABEL)), "grafik_semua_data.csv"));
+
+async function muat() {
+  try {
+    const r = await fetch("/api/statistik", { cache: "no-store" }); const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    D = j; render();
+  } catch (e) { $("isi").innerHTML = `<div class="kosong">Gagal memuat: ${esc(e.message)}</div>`; }
+}
+$("muat").addEventListener("click", muat);
+let lebarTerakhir = 0, tundaUkuran = null;
+addEventListener("resize", () => {            // gambar ulang bila lebar jendela berubah banyak (huruf tetap terbaca)
+  clearTimeout(tundaUkuran);
+  tundaUkuran = setTimeout(() => { const l = $("isi").clientWidth; if (D && Math.abs(l - lebarTerakhir) > 40) { lebarTerakhir = l; Object.values(window.__g || {}).forEach(gambarKartu); tandaMode(); } }, 200);
+});
+muat().then(() => { lebarTerakhir = $("isi").clientWidth; });
+</script>
+</body>
+</html>

@@ -43,6 +43,15 @@ CREATE INDEX IF NOT EXISTS ix_paket_satker ON sirup_paket(id_satker, tahun, is_a
 CREATE INDEX IF NOT EXISTS ix_events_run ON paket_events(run_id);
 """
 
+VIEW_PAKET_DETAIL = """
+CREATE VIEW v_paket_detail AS
+SELECT p.tahun, p.id_satker, p.kode_rup, p.jenis, p.nama_paket, p.pagu, p.metode_pemilihan, p.sumber_dana,
+       p.waktu_pemilihan, p.is_active, p.kode_rup_sebelumnya, p.kode_rup_pengganti, p.link,
+       d.lokasi_ringkas, d.volume, d.uraian, d.spesifikasi, d.mak, d.total_pagu, d.diambil_pada,
+       CASE WHEN d.kode_rup IS NULL THEN 0 ELSE 1 END AS ada_detail
+FROM sirup_paket p LEFT JOIN sirup_detail d ON d.kode_rup = p.kode_rup AND d.error IS NULL;
+"""
+
 FIELD_DIPANTAU = ("jenis", "nama_paket", "pagu", "metode_pemilihan", "sumber_dana", "waktu_pemilihan")
 PERSEN_TURUN_MAKS = 20
 
@@ -57,6 +66,8 @@ def buka(path=DB_DEFAULT):
     for kol in ("kode_rup_sebelumnya", "kode_rup_pengganti"):     # database lama: tambah kolom
         if kol not in ada:
             conn.execute(f"ALTER TABLE sirup_paket ADD COLUMN {kol} TEXT")
+    # tampilan gabungan daftar + detail, lengkap dengan kolom TAHUN (sirup_detail sendiri tidak punya kolom tahun)
+    conn.executescript("DROP VIEW IF EXISTS v_paket_detail;" + VIEW_PAKET_DETAIL)
     return conn
 
 

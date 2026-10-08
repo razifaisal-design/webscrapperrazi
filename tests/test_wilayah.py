@@ -110,3 +110,30 @@ class TestMasukPemeriksaan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestKecamatanTanpaKoma(unittest.TestCase):
+    def test_kata_sisa_setelah_kecamatan_diabaikan(self):
+        for tulis in ("Pontianak Kota Kota Pontianak", "Pontianak Tenggara Kota Pontianak", "Pontianak Timur Kota Pontianak"):
+            x = h(f"X (Jl. A Gg B Kelurahan Saigon Kecamatan {tulis})")
+            self.assertEqual(x["kecamatan_asli"], tulis.replace(" Kota Pontianak", "") if "Kota Kota" not in tulis else "Pontianak Kota", tulis)
+            self.assertNotIn("KECAMATAN_TIDAK_DIKENAL", jenis(x), tulis)
+
+    def test_salah_eja_di_tengah_kalimat_tetap_terdeteksi(self):
+        x = h("X (Jl. Ya' M. Sabran RT.004 Kelurahan Tanjung Hulu Kecamatan Pontianak Timu Kota Pontianak)")
+        self.assertEqual((x["kecamatan"], x["kecamatan_asli"]), ("Pontianak Timur", "Pontianak Timu"))
+        self.assertIn("KECAMATAN_SALAH_EJA", jenis(x))
+
+    def test_kecamatan_benar_benar_tidak_dikenal_tetap_kesalahan(self):
+        self.assertEqual(jenis(h("X (Jl. A, Kec. Sungai Raya Dalam)")), ["KECAMATAN_TIDAK_DIKENAL"])
+
+    def test_kelurahan_singkatan_dikenali_sebagai_nama_lengkap(self):
+        x = h("X (Jl. A, Kel.Mayor, Pontianak Timur, Kota Pontianak)")
+        self.assertEqual((x["kelurahan"], x["kelurahan_asli"]), ("Parit Mayor", "Mayor"))
+        self.assertIn("KELURAHAN_SALAH_EJA", jenis(x))
+        self.assertEqual(h("X (Jl. A, Komplek KPK Kel Beliung, Kota Pontianak)")["kelurahan"], "Sungai Beliung")
+
+    def test_kata_umum_yang_ambigu_tidak_ditebak(self):
+        x = h("X (Jl. A, Kel. Sungai, Kec. Pontianak Kota)")                    # 'Sungai' ada di banyak kelurahan
+        self.assertIsNone(x["kelurahan"])
+        self.assertIn("KELURAHAN_TIDAK_DIKENAL", jenis(x))

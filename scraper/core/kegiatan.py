@@ -37,7 +37,7 @@ def tambahkan(data, aturan=None):
         entri = []  # (mak_tercatat, pagu, mak_akhir, status, kategori_menurut_mak)
         for mak, pagu in p.get("mak") or []:
             km = kategori_mak(mak, peta) if peta else None
-            if kat not in (JALAN, SALURAN) or mak == TANPA_MAK:
+            if kat not in (JALAN, SALURAN) or mak == TANPA_MAK or not peta:
                 entri.append((mak, pagu, mak, TIDAK_DINILAI, None))
             elif km is None:
                 entri.append((mak, pagu, mak, BELUM_DIPETAKAN, None))
@@ -58,11 +58,11 @@ def tambahkan(data, aturan=None):
         p["jenis_perbaikan"] = _label(kat, jp) if salah else None
         p["jenis_akhir"] = _label(kat, jp)
 
-    data["perbaikan"] = {f: _rekap(data["paket"].values(), f) for f in ("Semua", "Fisik", "Konsultan")}
+    data["perbaikan"] = {f: rekap_perbaikan(data["paket"].values(), f) for f in ("Semua", "Fisik", "Konsultan")}
     return data
 
 
-def _rekap(paket, filter_jp):
+def rekap_perbaikan(paket, filter_jp):
     """Per MAK: nilai yang TERCATAT vs yang SEHARUSNYA (setelah perbaikan), plus selisih."""
     mak = defaultdict(lambda: {"tercatat": {"pagu": 0, "paket": set()}, "seharusnya": {"pagu": 0, "paket": set()},
                                "jenis": set()})
