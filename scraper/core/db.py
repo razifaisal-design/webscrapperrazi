@@ -1,5 +1,6 @@
 """Penyimpanan lokal SQLite + finalisasi run (diff -> event -> upsert -> tandai hilang) dalam satu transaksi."""
 import csv
+import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,13 @@ CREATE TABLE IF NOT EXISTS paket_events (
   jenis_event TEXT,                     -- BARU | BERUBAH | HILANG | MUNCUL_KEMBALI | KEMUNGKINAN_REVISI
   field TEXT, nilai_lama TEXT, nilai_baru TEXT, selisih NUMERIC, waktu TEXT
 );
+CREATE TABLE IF NOT EXISTS sirup_detail (
+  kode_rup TEXT PRIMARY KEY,
+  lokasi_ringkas TEXT, lokasi_json TEXT, volume TEXT, uraian TEXT, spesifikasi TEXT,
+  mak TEXT, sumber_dana_json TEXT, total_pagu NUMERIC, extra_json TEXT,
+  pagu_saat_diambil NUMERIC, nama_saat_diambil TEXT,
+  diambil_pada TEXT, error TEXT
+);
 CREATE INDEX IF NOT EXISTS ix_paket_satker ON sirup_paket(id_satker, tahun, is_active);
 CREATE INDEX IF NOT EXISTS ix_events_run ON paket_events(run_id);
 """
@@ -50,11 +58,11 @@ def _now():
     return datetime.now().isoformat(timespec="seconds")
 
 
-def mulai_run(conn, id_satker, tahun):
+def mulai_run(conn, id_satker, tahun, sumber="SIRUP"):
     with conn:
         cur = conn.execute(
-            "INSERT INTO scrape_runs(sumber,id_satker,tahun,mulai,status) VALUES('SIRUP',?,?,?, 'running')",
-            (id_satker, tahun, _now()),
+            "INSERT INTO scrape_runs(sumber,id_satker,tahun,mulai,status) VALUES(?,?,?,?, 'running')",
+            (sumber, id_satker, tahun, _now()),
         )
     return cur.lastrowid
 
@@ -173,16 +181,79 @@ def finalisasi(conn, run_id, paket, id_satker, tahun):
     return ringkasan
 
 
+DETAIL_DIPANTAU = ("lokasi_ringkas", "volume", "uraian", "spesifikasi", "mak", "extra_json")
+
+
+def paket_perlu_detail(conn, id_satker, tahun, semua=False):
+    """Paket aktif yang detailnya belum ada / gagal / sudah basi (pagu atau nama di daftar berubah)."""
+    sql = ("SELECT p.kode_rup,p.jenis,p.nama_paket,p.pagu FROM sirup_paket p "
+           "LEFT JOIN sirup_detail d ON d.kode_rup=p.kode_rup "
+           "WHERE p.id_satker=? AND p.tahun=? AND p.is_active=1 ")
+    if not semua:
+        sql += ("AND (d.kode_rup IS NULL OR d.error IS NOT NULL OR d.pagu_saat_diambil IS NOT p.pagu "
+                "OR d.nama_saat_diambil IS NOT p.nama_paket) ")
+    return conn.execute(sql + "ORDER BY p.kode_rup", (id_satker, tahun)).fetchall()
+
+
+def simpan_detail(conn, run_id, kode, nama, pagu, d):
+    """Simpan detail; bila sebelumnya sudah ada dan isinya berubah -> catat event."""
+    now = _now()
+    baru = {
+        "lokasi_ringkas": d["lokasi_ringkas"], "volume": d["volume"], "uraian": d["uraian"],
+        "spesifikasi": d["spesifikasi"], "mak": d["mak"],
+        "extra_json": json.dumps(d["extra"], ensure_ascii=False, sort_keys=True),
+    }
+    with conn:
+        lama = conn.execute("SELECT * FROM sirup_detail WHERE kode_rup=?", (kode,)).fetchone()
+        if lama is not None and lama["error"] is None:
+            for f in DETAIL_DIPANTAU:
+                if (lama[f] or "") != (baru[f] or ""):
+                    conn.execute(
+                        "INSERT INTO paket_events(run_id,sumber,kunci,nama_paket,jenis_event,field,nilai_lama,nilai_baru,waktu) "
+                        "VALUES(?,?,?,?,?,?,?,?,?)",
+                        (run_id, "SIRUP_DETAIL", kode, nama, "BERUBAH", "detail." + f, lama[f], baru[f], now))
+        conn.execute(
+            "INSERT OR REPLACE INTO sirup_detail(kode_rup,lokasi_ringkas,lokasi_json,volume,uraian,spesifikasi,mak,"
+            "sumber_dana_json,total_pagu,extra_json,pagu_saat_diambil,nama_saat_diambil,diambil_pada,error) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
+            (kode, baru["lokasi_ringkas"], json.dumps(d["lokasi"], ensure_ascii=False), baru["volume"], baru["uraian"],
+             baru["spesifikasi"], baru["mak"], json.dumps(d["sumber_dana"], ensure_ascii=False), d["total_pagu"],
+             baru["extra_json"], pagu, nama, now))
+
+
+def catat_gagal_detail(conn, kode, pesan):
+    with conn:
+        conn.execute(
+            "INSERT INTO sirup_detail(kode_rup,diambil_pada,error) VALUES(?,?,?) "
+            "ON CONFLICT(kode_rup) DO UPDATE SET error=excluded.error, diambil_pada=excluded.diambil_pada",
+            (kode, _now(), pesan[:300]))
+
+
+KOLOM_CSV = ["kode_rup", "jenis", "nama_paket", "penyelenggara", "pagu", "metode_pemilihan", "sumber_dana",
+             "waktu_pemilihan", "jenis_pengadaan", "lokasi", "volume", "uraian", "spesifikasi", "mak",
+             "produk_dalam_negeri", "usaha_kecil", "kontrak_mulai", "kontrak_akhir", "pemilihan_mulai",
+             "tanggal_umumkan", "link", "first_seen", "last_seen"]
+
+
 def ekspor_csv(conn, id_satker, tahun, path):
+    """CSV gabungan daftar + detail (kolom detail kosong bila belum diambil)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     rows = conn.execute(
-        "SELECT kode_rup,jenis,nama_paket,penyelenggara,pagu,metode_pemilihan,sumber_dana,waktu_pemilihan,link,"
-        "first_seen,last_seen FROM sirup_paket WHERE id_satker=? AND tahun=? AND is_active=1 ORDER BY jenis, kode_rup",
-        (id_satker, tahun),
-    ).fetchall()
+        "SELECT p.*, d.lokasi_ringkas, d.volume, d.uraian, d.spesifikasi, d.mak, d.extra_json "
+        "FROM sirup_paket p LEFT JOIN sirup_detail d ON d.kode_rup=p.kode_rup AND d.error IS NULL "
+        "WHERE p.id_satker=? AND p.tahun=? AND p.is_active=1 ORDER BY p.jenis, p.kode_rup", (id_satker, tahun)).fetchall()
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        w.writerow(rows[0].keys() if rows else ["kode_rup"])
-        w.writerows([tuple(r) for r in rows])
+        w.writerow(KOLOM_CSV)
+        for r in rows:
+            extra = json.loads(r["extra_json"]) if r["extra_json"] else {}
+            if r["jenis"] == "swakelola":
+                extra.setdefault("kontrak_mulai", extra.get("pelaksanaan_mulai"))
+                extra.setdefault("kontrak_akhir", extra.get("pelaksanaan_akhir"))
+            baris = dict(r)
+            baris["lokasi"] = r["lokasi_ringkas"]
+            baris.update({k: extra.get(k) for k in ("jenis_pengadaan", "produk_dalam_negeri", "usaha_kecil",
+                                                    "kontrak_mulai", "kontrak_akhir", "pemilihan_mulai", "tanggal_umumkan")})
+            w.writerow([baris.get(k) for k in KOLOM_CSV])
     return len(rows)

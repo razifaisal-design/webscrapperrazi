@@ -20,6 +20,12 @@ class SopanClient:
         self._terakhir = 0.0
 
     def get_json(self, url, params=None):
+        return self._get(url, params).json()
+
+    def get_text(self, url, params=None):
+        return self._get(url, params).text
+
+    def _get(self, url, params=None):
         for percobaan in range(1, self.retry + 1):
             tunggu = self.jeda - (time.monotonic() - self._terakhir)
             if tunggu > 0:
@@ -39,7 +45,7 @@ class SopanClient:
                 time.sleep(2 ** percobaan)
                 continue
             resp.raise_for_status()
-            return resp.json()
+            return resp
 
     def close(self):
         self._client.close()

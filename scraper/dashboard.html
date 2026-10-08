@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rekap RUP per MAK</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1b2430; --muted: #66707d; --line: #e2e6eb;
+    --accent: #1f5fbf; --accent-soft: #e6eefb; --ok: #1a7f4b; --ok-soft: #e3f5ea;
+    --warn: #b45309; --warn-soft: #fdf1dc; --bar: #9db9e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c; --card: #1a2029; --text: #e6e9ee; --muted: #93a0af; --line: #2a323d;
+      --accent: #6aa3f5; --accent-soft: #1d2b42; --ok: #5fcf93; --ok-soft: #17301f;
+      --warn: #f0b35a; --warn-soft: #3a2c14; --bar: #3a5a8f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .btn { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+         padding: 7px 12px; font: inherit; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .kpi .v { font-size: 26px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .progress > i { display: block; height: 100%; background: var(--accent); }
+  .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .note.ok { background: var(--ok-soft); color: var(--ok); }
+  .note.warn { background: var(--warn-soft); color: var(--warn); }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); align-items: center; }
+  .tools input { flex: 1 1 240px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+                 background: var(--bg); color: var(--text); font: inherit; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
+       cursor: pointer; white-space: nowrap; user-select: none; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.mak { cursor: pointer; }
+  tr.mak:hover { background: var(--accent-soft); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; word-break: break-all; }
+  .bar { height: 4px; background: var(--bar); border-radius: 99px; margin-top: 5px; }
+  tr.rinci > td { background: var(--bg); padding: 0 12px 12px 36px; }
+  tr.rinci table { margin-top: 8px; }
+  tr.rinci th { cursor: default; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .tag { font-size: 11px; border-radius: 99px; padding: 1px 8px; background: var(--accent-soft); color: var(--accent); }
+  .kosong { padding: 28px; text-align: center; color: var(--muted); }
+  .caret { display: inline-block; width: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Rekap Pagu per MAK</h1>
+      <div class="sub" id="sub">Memuat…</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" id="unduh">Unduh CSV</button>
+      <button class="btn" id="muat">Muat ulang</button>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+  <div id="catatan"></div>
+
+  <div class="panel">
+    <div class="tools">
+      <input id="cari" type="search" placeholder="Cari MAK, nama paket, atau kode RUP…" aria-label="Cari">
+      <span class="sub" id="hitung"></span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th data-k="mak">MAK</th>
+          <th data-k="jumlah_paket" class="num">Jumlah paket</th>
+          <th data-k="total_pagu" class="num">Total pagu</th>
+        </tr></thead>
+        <tbody id="isi"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const rp = new Intl.NumberFormat("id-ID");
+const fmt = (n) => "Rp " + rp.format(Math.round(n || 0));
+function ringkas(n) {
+  n = n || 0;
+  const t = (x, s) => "Rp " + (x).toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " " + s;
+  if (n >= 1e12) return t(n / 1e12, "T");
+  if (n >= 1e9) return t(n / 1e9, "M");
+  if (n >= 1e6) return t(n / 1e6, "jt");
+  return fmt(n);
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let data = null, urut = { k: "total_pagu", asc: false }, buka = new Set();
+
+async function muat() {
+  $("sub").textContent = "Memuat…";
+  try {
+    const r = await fetch("/api/rekap", { cache: "no-store" });
+    data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.status);
+    gambar();
+  } catch (e) {
+    $("sub").textContent = "Gagal memuat: " + e.message;
+  }
+}
+
+function gambar() {
+  const d = data, t = d.target;
+  $("sub").textContent = `${t.satker_nama} · ${t.klpd_nama} · TA ${t.tahun}` +
+    (d.detail_terakhir_diambil ? ` · detail terakhir diambil ${d.detail_terakhir_diambil.replace("T", " ")}` : "");
+  const persen = d.paket_aktif ? (d.paket_dengan_detail * 100 / d.paket_aktif) : 0;
+  $("kpis").innerHTML = `
+    <div class="kpi"><div class="l">Paket yang sudah diambil detailnya</div>
+      <div class="v">${rp.format(d.paket_dengan_detail)}</div>
+      <div class="s">dari ${rp.format(d.paket_aktif)} paket aktif (${persen.toFixed(1)}%)</div>
+      <div class="progress"><i style="width:${persen}%"></i></div></div>
+    <div class="kpi"><div class="l">Total pagu (paket ber-detail)</div>
+      <div class="v">${ringkas(d.total_pagu_mak)}</div><div class="s">${fmt(d.total_pagu_mak)}</div></div>
+    <div class="kpi"><div class="l">Jumlah MAK berbeda</div>
+      <div class="v">${rp.format(d.jumlah_mak)}</div>
+      <div class="s">rata-rata ${d.jumlah_mak ? (d.paket_dengan_detail / d.jumlah_mak).toFixed(1) : 0} paket per MAK</div></div>`;
+  $("catatan").innerHTML = d.paket_dengan_detail === 0
+    ? `<div class="note warn">Belum ada paket yang detailnya diambil. Jalankan <b>Ambil Detail SiRUP.command</b> dulu.</div>`
+    : Math.abs(d.selisih) < 0.5
+      ? `<div class="note ok">Cocok: jumlah pagu per MAK (${fmt(d.total_pagu_mak)}) sama dengan jumlah pagu paket di daftar SiRUP.</div>`
+      : `<div class="note warn">Perlu dicek: jumlah pagu per MAK berbeda ${fmt(d.selisih)} dari pagu paket di daftar (${fmt(d.total_pagu_daftar)}).</div>`;
+  tabel();
+}
+
+function tabel() {
+  const q = $("cari").value.trim().toLowerCase();
+  let baris = data.per_mak.map((g) => {
+    if (!q) return g;
+    if (g.mak.toLowerCase().includes(q)) return g;
+    const p = g.paket.filter((x) => x.nama_paket.toLowerCase().includes(q) || x.kode_rup.includes(q));
+    return p.length ? { ...g, paket: p, _filter: true } : null;
+  }).filter(Boolean);
+  const { k, asc } = urut;
+  baris.sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * (asc ? 1 : -1));
+  const maks = Math.max(1, ...data.per_mak.map((g) => g.total_pagu));
+  $("hitung").textContent = `${baris.length} dari ${data.per_mak.length} MAK`;
+  if (!baris.length) { $("isi").innerHTML = `<tr><td colspan="3" class="kosong">Tidak ada data.</td></tr>`; return; }
+  $("isi").innerHTML = baris.map((g) => {
+    const terbuka = buka.has(g.mak) || (q && g._filter);
+    const rinci = terbuka ? `<tr class="rinci"><td colspan="3"><table>
+      <thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Jenis</th><th class="num">Pagu di MAK ini</th></tr></thead><tbody>
+      ${g.paket.map((p) => `<tr><td class="mono"><a href="${esc(p.link)}" target="_blank" rel="noopener">${esc(p.kode_rup)}</a></td>
+        <td>${esc(p.nama_paket)}</td><td><span class="tag">${esc(p.jenis)}</span></td>
+        <td class="num">${fmt(p.pagu_mak)}${p.pagu_mak !== p.pagu_paket ? `<div class="sub">pagu paket ${fmt(p.pagu_paket)}</div>` : ""}</td></tr>`).join("")}
+      </tbody></table></td></tr>` : "";
+    return `<tr class="mak" data-mak="${esc(g.mak)}">
+      <td><span class="caret">${terbuka ? "▾" : "▸"}</span><span class="mono">${esc(g.mak)}</span>
+        <div class="bar" style="width:${Math.max(1, g.total_pagu * 100 / maks)}%"></div></td>
+      <td class="num">${rp.format(g.jumlah_paket)}</td><td class="num">${fmt(g.total_pagu)}</td></tr>${rinci}`;
+  }).join("");
+}
+
+$("isi").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.mak");
+  if (!tr || e.target.closest("a")) return;
+  const m = tr.dataset.mak;
+  buka.has(m) ? buka.delete(m) : buka.add(m);
+  tabel();
+});
+document.querySelectorAll("th[data-k]").forEach((th) => th.addEventListener("click", () => {
+  const k = th.dataset.k;
+  urut = { k, asc: urut.k === k ? !urut.asc : k === "mak" };
+  tabel();
+}));
+$("cari").addEventListener("input", tabel);
+$("muat").addEventListener("click", muat);
+$("unduh").addEventListener("click", () => {
+  if (!data) return;
+  const c = (s) => '"' + String(s ?? "").replace(/"/g, '""') + '"';
+  const baris = [["mak", "jumlah_paket", "total_pagu"].join(",")]
+    .concat(data.per_mak.map((g) => [c(g.mak), g.jumlah_paket, g.total_pagu].join(",")));
+  const blob = new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "rekap_pagu_per_mak.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+muat();
+setInterval(muat, 5 * 60 * 1000);
+</script>
+</body>
+</html>
