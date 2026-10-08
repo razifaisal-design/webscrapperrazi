@@ -1,0 +1,11 @@
+{
+  "default": "perkim-pontianak",
+  "targets": {
+    "perkim-pontianak": {
+      "klpd_nama": "Kota Pontianak",
+      "id_satker": 173394,
+      "satker_nama": "DINAS PERUMAHAN RAKYAT DAN KAWASAN PERMUKIMAN",
+      "tahun": 2026
+    }
+  }
+}
