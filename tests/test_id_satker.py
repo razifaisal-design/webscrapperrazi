@@ -183,3 +183,44 @@ class TestDataLintasId(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRespons2017(Dasar):
+    """Tahun lama: endpoint swakelola tidak punya iTotalDisplayRecords (balasan: {"aaData":[],"sEcho":1})."""
+
+    def setUp(self):
+        super().setUp()
+        asli = KlienPalsu.get_json
+
+        def get_json(inst, url, params=None):
+            hasil = asli(inst, url, params)
+            if "swakelola" in url and params["tahun"] <= 2017:
+                hasil.pop("iTotalDisplayRecords")           # persis seperti SiRUP untuk 2017
+            return hasil
+        p = mock.patch.object(KlienPalsu, "get_json", get_json)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_total_dianggap_nol_bukan_error(self):
+        self.assertEqual(sirup_total(KlienPalsu(), "swakelola", target(LAMA, 2017)), 0)
+
+    def test_tahun_2017_tetap_terambil_walau_swakelola_tanpa_kolom_total(self):
+        KlienPalsu.data = {(LAMA, 2017, "penyedia"): baris_penyedia(158)}
+        self.assertEqual(self.jalankan(target(DEFAULT, 2017)), 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*), MIN(id_satker) FROM sirup_paket WHERE tahun=2017").fetchone()[:], (158, LAMA))
+
+    def test_galat_tak_terduga_saat_menentukan_idsatker_tercatat_bukan_hilang(self):
+        class Rusak(KlienPalsu):
+            def get_json(self, url, params=None):
+                raise ValueError("balasan aneh")
+        kode = tugas.run_daftar(self.conn, target(DEFAULT, 2017), jeda=0.2, ekspor=False, log=self.log.append, buat_klien=Rusak)
+        self.assertEqual(kode, 1)
+        run = self.conn.execute("SELECT status, catatan FROM scrape_runs ORDER BY id DESC LIMIT 1").fetchone()
+        self.assertEqual(run["status"], "failed")
+        self.assertIn("balasan aneh", run["catatan"])
+        self.assertTrue(any("GAGAL" in x for x in self.log))
+
+
+def sirup_total(klien, jenis, tgt):
+    from scraper.sources import sirup
+    return sirup.total_paket(klien, jenis, tgt)

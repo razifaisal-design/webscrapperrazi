@@ -1,4 +1,4 @@
-"""CLI:  python -m scraper ambil sirup | run sirup | detail sirup | lokasi | periksa | web | events"""
+"""CLI:  python -m scraper spse nontender | ambil sirup | run sirup | detail sirup | lokasi | periksa | web | events"""
 import argparse
 import json
 import sys
@@ -29,6 +29,34 @@ def cmd_detail(args):
     try:
         return tugas.run_detail(conn, target, koneksi=args.koneksi, jeda=args.jeda, usia_hari=args.usia_hari,
                                 semua=args.semua, limit=args.limit, db_path=args.db)
+    except ValueError as e:
+        raise SystemExit(f"Parameter tidak valid: {e}")
+
+
+def cmd_spse(args):
+    _, target = muat_target(args.target, None)
+    lpse = args.lpse or (target.get("spse") or {}).get("lpse", "pontianak")
+    conn = db.buka(args.db)
+    try:
+        return tugas.run_spse(conn, args.jenis, lpse, args.tahun or target["tahun"], jeda=args.jeda, force=args.force, ekspor=not args.no_csv)
+    except KeyboardInterrupt:
+        print("\nDihentikan.")
+        return 130
+    except ValueError as e:
+        raise SystemExit(f"Parameter tidak valid: {e}")
+
+
+def cmd_spse_detail(args):
+    _, target = muat_target(args.target, None)
+    lpse = args.lpse or (target.get("spse") or {}).get("lpse", "pontianak")
+    conn = db.buka(args.db)
+    try:
+        satker = None if args.semua_satker else target["satker_nama"]
+        return tugas.run_spse_detail(conn, args.jenis, lpse, int(args.tahun or target["tahun"]), jeda=args.jeda,
+                                     usia_hari=args.usia_hari, semua=args.semua, limit=args.limit, satker=satker)
+    except KeyboardInterrupt:
+        print("\nDihentikan.")
+        return 130
     except ValueError as e:
         raise SystemExit(f"Parameter tidak valid: {e}")
 
@@ -113,6 +141,26 @@ def main(argv=None):
     r.add_argument("--force", action="store_true", help="terima penurunan jumlah > 20%%")
     r.add_argument("--no-csv", action="store_true")
     r.set_defaults(fn=cmd_run)
+    sp = sub.add_parser("spse", help="ambil DAFTAR paket dari SPSE/LPSE (100 baris per halaman); detail menyusul")
+    sp.add_argument("jenis", choices=["nontender"], help="jenis paket SPSE (tender menyusul)")
+    sp.add_argument("--target")
+    sp.add_argument("--lpse", help="kode LPSE di alamat spse.inaproc.id/<lpse> (default: dari config)")
+    sp.add_argument("--tahun", default=None, help="tahun anggaran (default: tahun di config, mis. 2026), atau 'semua' = semua tahun di pilihan SPSE")
+    sp.add_argument("--jeda", type=float, default=1.5, help="jeda antar permintaan, detik (default 1.5)")
+    sp.add_argument("--force", action="store_true", help="terima penurunan jumlah paket > 20%%")
+    sp.add_argument("--no-csv", action="store_true")
+    sp.set_defaults(fn=cmd_spse)
+    sd = sub.add_parser("spse-detail", help="ambil DETAIL paket SPSE (Pengumuman, Pemenang, Pemenang Berkontrak)")
+    sd.add_argument("jenis", choices=["nontender"])
+    sd.add_argument("--target")
+    sd.add_argument("--lpse", help="kode LPSE (default: dari config)")
+    sd.add_argument("--tahun", default=None, help="tahun anggaran (default: tahun di config)")
+    sd.add_argument("--jeda", type=float, default=1.5, help="jeda antar permintaan, detik (default 1.5)")
+    sd.add_argument("--limit", type=int, help="ambil hanya N paket (uji coba)")
+    sd.add_argument("--usia-hari", type=int, default=7, help="ambil ulang detail yang lebih tua dari N hari (0 = nonaktif)")
+    sd.add_argument("--semua", action="store_true", help="paksa ambil ulang semua")
+    sd.add_argument("--semua-satker", action="store_true", help="rincian lengkap (pemenang, kontrak, jadwal) untuk SEMUA instansi, bukan hanya satker target")
+    sd.set_defaults(fn=cmd_spse_detail)
     a = sub.add_parser("ambil", help="SATU PROSES: ambil daftar RUP, lalu detail paket, lalu bangun database Jalan/Gang")
     a.add_argument("sumber", choices=["sirup"])
     a.add_argument("--target")

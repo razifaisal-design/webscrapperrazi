@@ -185,3 +185,17 @@ class TestGabungGang(unittest.TestCase):
         self.assertEqual(gabung_gang({}), [])
         g = gabung_gang({2026: self._b("X (Jl. B, Gg. Z)", "X (Jl. A, Gg. Y)")})
         self.assertEqual([x["jalan"] for x in g], ["Jl. A", "Jl. B"])
+
+
+class TestNamaLama(unittest.TestCase):
+    def test_awalan_pengadaan_jalan_kabupaten_kota_tidak_terbaca_sebagai_nama_jalan(self):
+        h = parse_nama("Belanja modal Pengadaan Jalan Kabupaten/Kota (Peningkatan Kualitas Lingkungan Permukiman Kota Pontianak Jl. PGA, Gang Karya 1 Kec. Pontianak Kota)")
+        self.assertEqual((h["jalan"], h["gang"], h["kecamatan"]), ("PGA", ["Karya 1"], "Pontianak Kota"))
+
+    def test_awalan_bangunan_pembuang_pengaman_sungai(self):
+        h = parse_nama("Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai (Jl. Tanjung Raya 2, Gg. Mawar, Kec. Pontianak Timur)")
+        self.assertEqual((h["jalan"], h["gang"], h["kecamatan"]), ("Tanjung Raya 2", ["Mawar"], "Pontianak Timur"))
+
+    def test_nama_lama_tanpa_lokasi_jalan_tidak_menghasilkan_jalan_palsu(self):
+        h = parse_nama("Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai (Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai)")
+        self.assertIsNone(h["jalan"])

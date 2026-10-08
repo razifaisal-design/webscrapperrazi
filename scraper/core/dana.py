@@ -2,11 +2,18 @@
 
 Daftar SiRUP menggabungkan sumber dana semua rincian paket ('APBD, APBD, APBD'). Untuk paket yang rinciannya
 campuran (APBD dan APBDP), dipilih yang dominan; hal itu dilaporkan sebagai peringatan, bukan disembunyikan."""
+import re
 from collections import Counter
 
 
 def _token(teks):
-    return [t.strip() for t in str(teks or "").split(",") if t.strip()]
+    """Pisah koma, buang kurung dan spasi: '[APBD]' -> 'APBD'. Nilai lain (mis. 'N/A', 'APBN') dibiarkan apa adanya."""
+    hasil = []
+    for t in str(teks or "").split(","):
+        t = re.sub(r"[\[\](){}\s]", "", t)
+        if t:
+            hasil.append(t)
+    return hasil
 
 
 def kanon(teks):
@@ -28,7 +35,8 @@ def dominan(rincian):
     """Dari rincian detail [{'sumber_dana': 'APBD', 'pagu': 100}, ...]: sumber dengan pagu terbesar. -> (dominan, [semua sumber])."""
     jumlah, urutan = Counter(), []
     for r in rincian or []:
-        s = str(r.get("sumber_dana") or "").strip()
+        t = _token(r.get("sumber_dana"))
+        s = t[0] if t else ""
         if not s:
             continue
         if s not in jumlah:

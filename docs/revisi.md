@@ -34,3 +34,31 @@ kedua paket saling ditautkan (`kode_rup_sebelumnya` / `kode_rup_pengganti`).
 - Keputusan: berapa hari jendela pemasangan lintas pengambilan? (usulan: 7–14 hari)
 - Keputusan: syarat "MAK sama atau pagu mirip" — seberapa mirip pagu? (usulan: selisih ≤ 10%)
 - Penjadwalan otomatis: `launchd` (Mac) atau jalankan lewat tombol di dashboard secara berkala.
+
+---
+
+# Catatan SPSE / LPSE (Bagian 2) — dicatat 8 Oktober 2026
+
+Sumber: `https://spse.inaproc.id/pontianak/nontender`. Yang sudah dikerjakan: **daftar Non-Tender saja** (tahun 2026 sebagai bawaan).
+
+## Ditunda (untuk nanti)
+- **Tender** (`/pontianak/lelang`): belum diambil.
+- **Detail paket** (halaman `pengumumanpl`): belum diambil. Isi yang dibutuhkan dari detail: satker/OPD pemilik, HPS pasti, kode RUP (untuk menautkan ke SiRUP), pemenang, nilai kontrak, jadwal.
+- Penautan paket SPSE → RUP SiRUP (lewat kode RUP di detail) dan status per RUP (Belum Diumumkan / Proses / Pemenang / Berkontrak / Batal).
+- Pemisahan **hanya Dinas Perkim**: daftar SPSE memuat semua K/L/PD di LPSE ini (kolom instansi hanya "Kota Pontianak"); satker baru terlihat di halaman detail.
+
+## Temuan teknis
+- `recordsTotal` selalu 2147483647 → tidak bisa dipakai sebagai total pembanding. Validasi memakai: tanpa duplikat, kode urut naik, dan cek ujung (halaman pertama urutan turun).
+- Urutan bawaan (tanggal pengumuman) **tidak stabil** antar halaman (7 duplikat/terlewat dari 1155 paket). Solusi: urutkan kolom 0 (kode paket) naik; hasilnya stabil (1155 unik).
+- HPS di daftar hanya ringkas ("19,9 Jt") → `hps_perkiraan` hanya perkiraan; nilai pasti di detail.
+- Pilihan tahun di situs: 2026, 2025, 2024, 2023, 2022, 2021, 2019 (tidak ada 2020).
+- Token `authenticityToken` + cookie sesi diperlukan untuk POST DataTables; diperbarui sekali bila kedaluwarsa.
+
+## Catatan pengambilan
+- Sempat terambil semua tahun (2019, 2021–2026) sebelum diminta 2026 saja; data tahun lain masih di `data/pantau.db` (tabel `spse_paket`). Bisa dihapus bila tidak diperlukan.
+
+## Detail SPSE Non-Tender (uji coba 10 paket, 8 Oktober 2026)
+- Perintah: `python -m scraper spse-detail nontender --tahun 2026 --limit 10` (tabel `spse_detail`, 3 halaman per paket).
+- Halaman: Pengumuman (`/nontender/{kode}/pengumumanpl`, tanpa bagian Syarat Kualifikasi), Pemenang (`/evaluasinontender/{kode}/pemenang`, semua kolom), Pemenang Berkontrak (`.../pemenangberkontrak`, hanya untuk cek `nilai_kontrak` terisi = PPK sudah mengisi e-kontrak).
+- Satker hanya ada di detail: 7 dari 10 paket pertama ternyata bukan milik Dinas Perkim → pemfilteran satker harus menunggu detail (atau ambil detail semua 1.155 paket ≈ 1,5 jam pada jeda 1,5 dtk).
+- Belum dikerjakan: tombol/tab detail di dashboard; penautan kode RUP SPSE ↔ SiRUP (kode RUP sudah tersimpan di `spse_detail.kode_rup`); melewati halaman Pemenang untuk paket dibatalkan (hemat permintaan).

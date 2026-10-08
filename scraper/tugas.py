@@ -11,7 +11,7 @@ from pathlib import Path
 from . import konfig
 from .core import database, db, rekap
 from .core.http import DiblokirError, SopanClient
-from .sources import sirup, sirup_detail
+from .sources import sirup, sirup_detail, spse
 
 ROOT = Path(__file__).resolve().parents[1]
 KONEKSI_MAKS, JEDA_MIN = 10, 0.2
@@ -110,6 +110,11 @@ def _selesaikan_target(conn, target, jeda, buat_klien, log):
     except DiblokirError as e:
         log(f"[BERHENTI] {e}")
         return None, 2
+    except Exception as e:           # respons tak terduga / jaringan: catat jelas, jangan gagal tanpa jejak
+        run_id = db.mulai_run(conn, target["id_satker"], target["tahun"])
+        db.tutup_run(conn, run_id, "failed", 0, None, f"gagal menentukan idSatker: {e!r}")
+        log(f"[GAGAL] Tidak bisa memeriksa idSatker untuk tahun {target['tahun']}: {e!r}")
+        return None, 1
     finally:
         client.close()
     if sat is None:
@@ -329,3 +334,170 @@ def run_semua(conn, target, koneksi=1, jeda=1.5, usia_hari=7, semua=False, limit
     log("=== TAHAP 2/2: detail paket ===")
     return run_detail(conn, target, koneksi=koneksi, jeda=jeda, usia_hari=usia_hari, semua=semua, limit=limit, log=log,
                       progres=progres, berhenti=berhenti, buat_klien=buat_klien, ambil=ambil, db_path=db_path)
+
+
+# ======================= SPSE (LPSE): daftar paket =======================
+def csv_spse_path(lpse, jenis, tahun="semua"):
+    return ROOT / "data" / f"spse_{lpse}_{jenis}_{tahun}.csv"
+
+
+def run_spse(conn, jenis="nontender", lpse="pontianak", tahun="semua", jeda=1.5, force=False, ekspor=True, log=print,
+             buat_klien=SopanClient, berhenti=None, progres=None):
+    """Ambil DAFTAR paket SPSE (tanpa detail) untuk satu tahun atau semua tahun di pilihan SPSE; 100 baris per halaman.
+    Return kode: 0 ok, 1 ada tahun gagal, 2 diblokir, 3 tahun tidak tersedia, 130 dihentikan."""
+    cek_param(1, jeda)
+    sumber = db.sumber_spse(jenis)
+    client = buat_klien(jeda=jeda)
+    kode_akhir, ringkas_semua = 0, []
+    try:
+        sesi = spse.Sesi(client, lpse, jenis).buka()
+        if tahun in (None, "semua"):
+            daftar = list(sesi.tahun_tersedia)
+        elif int(tahun) in sesi.tahun_tersedia:
+            daftar = [int(tahun)]
+        else:
+            log(f"[TIDAK ADA] Tahun {tahun} tidak ada di pilihan SPSE {lpse}. Tahun yang tersedia: {', '.join(map(str, sesi.tahun_tersedia))}.")
+            return 3
+        log(f"SPSE {lpse} - {jenis}: {len(daftar)} tahun akan diambil ({', '.join(map(str, daftar))}), 100 baris per halaman.")
+        for i, th in enumerate(daftar, 1):
+            if berhenti is not None and berhenti.is_set():
+                log("Dihentikan.")
+                return 130
+            run_id = db.mulai_run(conn, 0, th, sumber=sumber)
+            log(f"=== Tahun {th} ({i}/{len(daftar)}) - Run #{run_id} ===")
+            try:
+                baris = [spse.parse_baris(r, lpse, jenis, th) for r in spse.rayap_tahun(sesi, th, log=log, berhenti=berhenti)]
+            except spse.Dihentikan:
+                db.tutup_run(conn, run_id, "failed", 0, None, "dihentikan pengguna")
+                log("Dihentikan. Data lama tidak diubah.")
+                return 130
+            except DiblokirError as e:
+                db.tutup_run(conn, run_id, "failed", 0, None, str(e))
+                log(f"[BERHENTI] {e}")
+                return 2
+            except Exception as e:                       # satu tahun gagal tidak membatalkan tahun lain
+                db.tutup_run(conn, run_id, "failed", 0, None, repr(e))
+                log(f"[GAGAL] tahun {th}: {e!r} - data lama tidak diubah.")
+                kode_akhir = 1
+                continue
+            alasan = db.validasi_spse(baris, db.jumlah_run_valid_spse(conn, jenis, th), force)
+            if alasan:
+                db.tutup_run(conn, run_id, "invalid", len(baris), None, "; ".join(alasan))
+                log(f"[TIDAK VALID - data lama tidak diubah] tahun {th}: " + "; ".join(alasan))
+                kode_akhir = 1
+                continue
+            r = db.finalisasi_spse(conn, run_id, baris, lpse, jenis, th)
+            db.tutup_run(conn, run_id, "success", len(baris), None)
+            ringkas_semua.append((th, len(baris)))
+            log(f"Tahun {th}: {len(baris)} paket tersimpan" + (" (data dasar)." if r["baseline"] else
+                f" - {r['baru']} baru, {r['berubah']} berubah, {r['hilang']} hilang, {r['muncul_kembali']} muncul kembali."))
+            if progres:
+                progres(i, len(daftar), len(ringkas_semua), i - len(ringkas_semua))
+    except DiblokirError as e:
+        log(f"[BERHENTI] {e}")
+        return 2
+    except Exception as e:
+        log(f"[GAGAL] SPSE {lpse}: {e!r}")
+        return 1
+    finally:
+        client.close()
+    if ringkas_semua:
+        log(f"Selesai. {sum(n for _, n in ringkas_semua)} paket dari {len(ringkas_semua)} tahun.")
+    if ekspor:
+        label = "semua" if tahun in (None, "semua") else int(tahun)
+        n = database.ekspor_spse_csv(conn, lpse, jenis, csv_spse_path(lpse, jenis, label), label)
+        log(f"CSV : {csv_spse_path(lpse, jenis, label)} ({n} baris)")
+    return kode_akhir
+
+
+def _ambil_detail_spse(client, lpse, jenis, kode, rinci):
+    """Satu paket: Pengumuman dulu; bila `rinci(satker)` benar, lanjut Pemenang, Pemenang Berkontrak, Jadwal, dan
+    riwayat perubahan tiap tahap yang pernah diubah. Return (detail, jadwal|None)."""
+    pengumuman = spse.parse_pengumuman(client.get_text(spse.url_tab(lpse, jenis, kode, "pengumuman")))
+    if pengumuman["kode_paket"] != kode:
+        raise spse.SpseError(f"kode di halaman ({pengumuman['kode_paket']}) tidak sama dengan yang diminta")
+    kosong = {"info": {}, "pemenang": []}
+    if not rinci(pengumuman["satker"]):
+        return spse.ringkas_detail(pengumuman, kosong, kosong), None
+    pemenang = spse.parse_pemenang(client.get_text(spse.url_tab(lpse, jenis, kode, "pemenang")))
+    kontrak = spse.parse_pemenang(client.get_text(spse.url_tab(lpse, jenis, kode, "kontrak")))
+    jadwal = spse.parse_jadwal(client.get_text(spse.url_jadwal(lpse, jenis, kode)))
+    for t in jadwal:
+        t["riwayat"] = spse.parse_riwayat_jadwal(client.get_text(t["url_riwayat"])) if t["jumlah_perubahan"] and t["url_riwayat"] else []
+    return spse.ringkas_detail(pengumuman, pemenang, kontrak), jadwal
+
+
+def run_spse_detail(conn, jenis="nontender", lpse="pontianak", tahun=2026, jeda=1.5, usia_hari=7, semua=False, limit=None,
+                    satker=None, log=print, buat_klien=SopanClient, berhenti=None, progres=None):
+    """Ambil detail paket SPSE (1 koneksi). Tiap paket: tab Pengumuman (tanpa Syarat Kualifikasi). Untuk paket milik `satker`
+    (kosong = semua paket): tab Pemenang (semua kolom), Pemenang Berkontrak (cek nilai kontrak sudah diisi PPK), Jadwal
+    beserta riwayat perubahan tiap tahap. Return kode: 0 ok, 2 diblokir, 4 ada yang gagal, 130 dihentikan."""
+    cek_param(1, jeda)
+    antre = db.paket_perlu_detail_spse(conn, lpse, jenis, int(tahun), usia_hari, semua, satker=satker)
+    if limit:
+        antre = antre[:limit]
+    if not antre:
+        log(f"Tidak ada detail SPSE yang perlu diambil untuk {tahun} (daftar kosong, atau semuanya sudah diambil dan tahapannya tidak berubah).")
+        return 0
+    sasaran = db.norm_satker(satker) if satker else None
+    rinci = (lambda sat: sasaran is None or db.norm_satker(sat) == sasaran)             # noqa: E731
+    log(f"SPSE {lpse} - {jenis} {tahun}: {len(antre)} paket" + (f"; rincian lengkap (pemenang, kontrak, jadwal) hanya untuk {satker}" if sasaran else "") +
+        f"; jeda {jeda:g} detik, 1 koneksi.")
+    client = buat_klien(jeda=jeda)
+    ok = gagal = 0
+    try:
+        for i, kode in enumerate(antre, 1):
+            if berhenti is not None and berhenti.is_set():
+                log("Dihentikan.")
+                return 130
+            try:
+                detail, jadwal = _ambil_detail_spse(client, lpse, jenis, kode, rinci)
+                db.simpan_detail_spse(conn, lpse, jenis, kode, detail, jadwal=jadwal)
+                ok += 1
+                if jadwal is None:
+                    log(f"[{i}/{len(antre)}] {kode} {detail['satker'][:40]} (instansi lain - tanpa rincian)")
+                else:
+                    log(f"[{i}/{len(antre)}] {kode} {detail['satker'][:30]} | pemenang: {detail['pemenang_nama'] or '-'} | kontrak: "
+                        f"{'Rp {:,.0f}'.format(detail['nilai_kontrak']).replace(',', '.') if detail['kontrak_terisi'] else 'belum diisi'} | jadwal {len(jadwal)} tahap")
+            except DiblokirError as e:
+                log(f"[BERHENTI] {e}")
+                return 2
+            except Exception as e:                       # satu paket gagal tidak menghentikan yang lain
+                db.simpan_detail_spse(conn, lpse, jenis, kode, None, repr(e))
+                gagal += 1
+                log(f"[{i}/{len(antre)}] {kode} GAGAL: {e!r}")
+            if progres:
+                progres(i, len(antre), ok, gagal)
+    finally:
+        client.close()
+    log(f"Selesai. {ok} paket berhasil, {gagal} gagal.")
+    return 4 if gagal else 0
+
+
+def run_spse_semua(conn, jenis="nontender", lpse="pontianak", tahun=2026, jeda=1.5, usia_hari=7, semua=False, force=False,
+                   limit=None, satker=None, log=print, progres=None, tahap=None, berhenti=None, buat_klien=SopanClient):
+    """SATU PROSES SPSE: tahap 1 daftar paket (100 per halaman), tahap 2 detail paket. Tahap 2 hanya jalan bila tahap 1 berhasil."""
+    cek_param(1, jeda)
+    berhenti = berhenti or threading.Event()
+    if tahap:
+        tahap(1, 2, "Daftar paket SPSE")
+    log("=== TAHAP 1/2: daftar paket SPSE ===")
+    kode = run_spse(conn, jenis, lpse, tahun, jeda=jeda, force=force, ekspor=True, log=log, buat_klien=buat_klien, berhenti=berhenti)
+    if kode != 0:
+        log(f"Tahap 2 (detail) TIDAK dijalankan karena tahap 1 tidak berhasil (kode {kode}).")
+        return kode
+    if berhenti.is_set():
+        return 130
+    if tahap:
+        tahap(2, 2, "Detail paket SPSE")
+    log("=== TAHAP 2/2: detail paket SPSE ===")
+    tahun_list = [t for (t,) in conn.execute("SELECT DISTINCT tahun FROM spse_paket WHERE lpse=? AND jenis=? ORDER BY tahun DESC", (lpse, jenis))] \
+        if tahun in (None, "semua") else [int(tahun)]
+    kode_akhir = 0
+    for th in tahun_list:
+        k = run_spse_detail(conn, jenis, lpse, th, jeda=jeda, usia_hari=usia_hari, semua=semua, limit=limit, satker=satker, log=log,
+                            buat_klien=buat_klien, berhenti=berhenti, progres=progres)
+        if k in (2, 130):
+            return k
+        kode_akhir = kode_akhir or k
+    return kode_akhir

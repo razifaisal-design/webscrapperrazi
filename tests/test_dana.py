@@ -12,6 +12,11 @@ class TestKanon(unittest.TestCase):
                               ("APBD, APBD, APBD, APBD, APBD, APBD, APBD, APBD, APBD, APBD, APBD", "APBD"), ("", ""), (None, "")):
             self.assertEqual(dana.kanon(mentah), hasil, mentah)
 
+    def test_kurung_siku_dan_tanda_lain_dibuang(self):
+        for mentah, hasil in (("[APBD]", "APBD"), ("[APBD], [APBD]", "APBD"), ("APBD,[APBD],APBDP", "APBD"), (" APBDP ", "APBDP"), ("[APBDP]", "APBDP")):
+            self.assertEqual(dana.kanon(mentah), hasil, mentah)
+        self.assertEqual(dana.dominan([{"sumber_dana": "[APBDP]", "pagu": 5}, {"sumber_dana": "APBD", "pagu": 1}]), ("APBDP", ["APBDP", "APBD"]))
+
     def test_tidak_pernah_berkoma(self):
         for mentah in ("APBD, APBDP", "APBD,APBD,APBDP,", "APBDP, APBD, APBD", "APBD,APBD,APBD,APBD,APBDP,APBDP,APBDP,APBDP,"):
             self.assertNotIn(",", dana.kanon(mentah))
@@ -61,3 +66,11 @@ class TestScraperDanMigrasi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNilaiLainTidakDirusak(unittest.TestCase):
+    def test_na_dan_apbn_dibiarkan(self):
+        for nilai in ("N/A", "APBN", "PHLN"):
+            self.assertEqual(dana.kanon(nilai), nilai)
+        self.assertEqual(dana.kanon("[N/A]"), "N/A")
+        self.assertEqual(dana.dominan([{"sumber_dana": "N/A", "pagu": 1}]), ("N/A", ["N/A"]))

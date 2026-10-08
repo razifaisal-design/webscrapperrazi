@@ -8,7 +8,8 @@ import html
 import re
 from collections import Counter, defaultdict
 
-_AWALAN = re.compile(r"^\s*Belanja Modal\s+(?:Jalan Kota|Saluran Pembuang(?:\s+Pasang\s+Surut)?)\s*[-–:]?\s*", re.I)
+_AWALAN = re.compile(r"^\s*Belanja Modal\s+(?:Pengadaan\s+)?(?:Jalan\s+Kabupaten\s*/\s*Kota|Jalan Kota|Bangunan\s+Pembuang\s+Pengaman\s+Sungai"
+                     r"|Saluran Pembuang(?:\s+Pasang\s+Surut)?)\s*[-–:]?\s*", re.I)
 _BERHENTI = r"(?=,|\)|\(|\s+(?:Kec|Kel|Kelurahan|Kecamatan|RT|RW|Komp|Komplek|Perum|Perumahan|dan|Gg|Gang)\b|$)"
 _NAMA = r"(?P<n>[^,()]+?)"
 _JALAN = re.compile(r"\b(?:Jl|JI|Jln|Jalan)\b[.,]?\s*" + _NAMA + _BERHENTI, re.I)

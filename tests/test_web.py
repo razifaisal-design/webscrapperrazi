@@ -88,6 +88,12 @@ class TestWebTugas(unittest.TestCase):
         self.assertEqual(c.getresponse().status, 403)
         c.close()
 
+    def test_penanda_kode_basi_muncul_saat_kode_berubah_setelah_server_dimulai(self):
+        self.assertFalse(self.minta("GET", "/api/tugas")[1]["kode_basi"])
+        with mock.patch.object(web, "sidik_kode", return_value=web.sidik_kode() + 100):       # seolah ada berkas .py yang baru diubah
+            self.assertTrue(self.minta("GET", "/api/tugas")[1]["kode_basi"])
+        self.assertFalse(self.minta("GET", "/api/tugas")[1]["kode_basi"])
+
     def test_get_status_boleh(self):
         s, j = self.minta("GET", "/api/tugas")
         self.assertEqual((s, j["status"]), (200, "idle"))
@@ -119,6 +125,39 @@ class TestWebTugas(unittest.TestCase):
                 break
             time.sleep(0.02)
         self.assertEqual((st["status"], st["kode"]), ("dihentikan", 130))
+
+    def test_spse_nontender_tahun_angka_dan_semua(self):
+        got = []
+
+        def run_spse_palsu(conn, jenis, lpse, tahun, **kw):
+            got.append((jenis, lpse, tahun, kw["jeda"]))
+            return 0
+
+        with mock.patch.object(tugas, "run_spse", run_spse_palsu):
+            for th in (2026, "semua"):
+                s, j = self.mulai(jenis="spse_nontender", tahun=th, koneksi=9, jeda=1.5)
+                self.assertEqual((s, j["koneksi"]), (200, 1), th)                  # SPSE selalu 1 koneksi
+                for _ in range(100):
+                    if self.minta("GET", "/api/tugas")[1]["status"] != "berjalan":
+                        break
+                    time.sleep(0.02)
+        self.assertEqual([(g[0], g[2]) for g in got], [("nontender", 2026), ("nontender", "semua")])
+        self.assertEqual(self.mulai(jenis="spse_nontender", tahun=1999)[0], 400)
+        self.assertEqual(self.mulai(jenis="spse_nontender", tahun=2026, jeda=0.05)[0], 400)
+
+    def test_api_spse_bawaan_tahun_config(self):
+        conn = db.buka(self.path)
+        for kode, th in (("1", 2026), ("2", 2025)):
+            conn.execute("INSERT INTO spse_paket (lpse,jenis,kode_paket,tahun,nama_paket,is_active) VALUES ('pontianak','nontender',?,?,?,1)",
+                         (kode, th, f"Paket {kode}"))
+        conn.commit()
+        conn.close()
+        s, j = self.minta("GET", "/api/spse")
+        self.assertEqual(s, 200)
+        self.assertEqual([b["kode_paket"] for b in j["baris"]], ["1"])
+        self.assertEqual(sorted(j["tahun"]), [2025, 2026])
+        s, j = self.minta("GET", "/api/spse?tahun=semua")
+        self.assertEqual(len(j["baris"]), 2)
 
     def test_id_satker_opsional_divalidasi_dan_diteruskan(self):
         for bad in ({"id_satker": "abc"}, {"id_satker": 0}, {"id_satker": -5}, {"id_satker": 10**10}):

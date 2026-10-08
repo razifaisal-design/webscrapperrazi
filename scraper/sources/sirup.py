@@ -62,9 +62,17 @@ def _params(target, mulai, jumlah):
     }
 
 
+def _total(data):
+    """Jumlah paket menurut respons. Untuk tahun lama, endpoint swakelola membalas {"aaData":[],"sEcho":1} TANPA
+    iTotalDisplayRecords - itu berarti 0, bukan error."""
+    if "iTotalDisplayRecords" in data:
+        return int(data["iTotalDisplayRecords"])
+    return len(data.get("aaData") or [])
+
+
 def total_paket(client, jenis, target):
     """Jumlah paket menurut situs (1 permintaan kecil) - dipakai untuk menguji apakah idSatker benar untuk tahun itu."""
-    return int(client.get_json(ENDPOINT[jenis], _params(target, 0, 1))["iTotalDisplayRecords"])
+    return _total(client.get_json(ENDPOINT[jenis], _params(target, 0, 1)))
 
 
 def ambil_semua(client, jenis, target, log=print):
@@ -73,7 +81,7 @@ def ambil_semua(client, jenis, target, log=print):
     paket, total, mulai = [], None, 0
     while True:
         data = client.get_json(url, _params(target, mulai, PER_HALAMAN))
-        total = int(data["iTotalDisplayRecords"])
+        total = _total(data)
         baris = data["aaData"]
         paket.extend(parse_baris(jenis, b, target) for b in baris)
         log(f"  [{jenis}] {len(paket)}/{total}")

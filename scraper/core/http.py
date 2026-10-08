@@ -25,13 +25,17 @@ class SopanClient:
     def get_text(self, url, params=None):
         return self._get(url, params).text
 
-    def _get(self, url, params=None):
+    def post_json(self, url, data=None, params=None, headers=None):
+        """POST formulir; balasan di-parse sebagai JSON (ValueError bila bukan JSON, mis. halaman HTML token kedaluwarsa)."""
+        return self._get(url, params, metode="POST", data=data, headers=headers).json()
+
+    def _get(self, url, params=None, metode="GET", data=None, headers=None):
         for percobaan in range(1, self.retry + 1):
             tunggu = self.jeda - (time.monotonic() - self._terakhir)
             if tunggu > 0:
                 time.sleep(tunggu)
             try:
-                resp = self._client.get(url, params=params)
+                resp = self._client.request(metode, url, params=params, data=data, headers=headers)
             except httpx.TransportError:
                 self._terakhir = time.monotonic()
                 if percobaan == self.retry:

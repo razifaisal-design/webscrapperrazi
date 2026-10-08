@@ -8,7 +8,7 @@ from scraper import cli
 class TestPerintahTerminal(unittest.TestCase):
     """Penjaga: setiap sub-perintah harus terbangun dan fungsinya ada (regresi: cmd_run/cmd_detail pernah hilang diam-diam)."""
 
-    PERINTAH = [["ambil", "sirup"], ["run", "sirup"], ["detail", "sirup"], ["lokasi"], ["periksa"], ["web"], ["events"]]
+    PERINTAH = [["spse", "nontender"], ["ambil", "sirup"], ["run", "sirup"], ["detail", "sirup"], ["lokasi"], ["periksa"], ["web"], ["events"]]
 
     def test_semua_perintah_punya_bantuan_dan_fungsi(self):
         for p in self.PERINTAH:
@@ -19,7 +19,7 @@ class TestPerintahTerminal(unittest.TestCase):
                 self.assertIn("usage", out.getvalue())
 
     def test_semua_fungsi_yang_dirujuk_parser_ada(self):
-        for nama in ("cmd_run", "cmd_detail", "cmd_ambil", "cmd_lokasi", "cmd_periksa", "cmd_web", "cmd_events"):
+        for nama in ("cmd_run", "cmd_detail", "cmd_ambil", "cmd_spse", "cmd_lokasi", "cmd_periksa", "cmd_web", "cmd_events"):
             self.assertTrue(callable(getattr(cli, nama, None)), nama)
 
     def test_opsi_id_satker_tersedia_di_perintah_pengambilan(self):

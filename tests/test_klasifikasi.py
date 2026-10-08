@@ -63,3 +63,27 @@ class TestNormUraian(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPenamaanLama(unittest.TestCase):
+    """Sebelum 2021 nama paket berbeda (2020 dan sebelumnya)."""
+
+    def test_pengadaan_jalan_kabupaten_kota_adalah_jalan(self):
+        for nama in ("Belanja modal Pengadaan Jalan Kabupaten/Kota (Jl. Kom Yos Sudarso, Gang Karya 1)",
+                     "Belanja Modal Pengadaan Jalan Kabupaten / Kota (Peningkatan Kualitas Lingkungan Permukiman)",
+                     "Belanja  modal  Pengadaan  Jalan  Kabupaten/Kota ( Jl. Flora)"):
+            self.assertEqual(K(nama, nama)[0], "Jalan", nama)
+
+    def test_pengadaan_bangunan_pembuang_pengaman_sungai_adalah_saluran(self):
+        for nama in ("Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai (Jl. Parit Tengah)",
+                     "Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai (Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai)"):
+            self.assertEqual(K(nama, nama)[0], "Saluran", nama)
+
+    def test_perencanaan_pada_nama_lama_tetap_konsultan(self):
+        nama = "Belanja modal Pengadaan Bangunan Pembuang Pengaman Sungai (- Perencanaan Penataan Drainase Lingkungan (Kec. Pontianak Barat))"
+        self.assertEqual(K(nama, nama), ("Saluran", "Konsultan"))
+
+    def test_aturan_baru_tidak_mengubah_nama_2021_ke_atas(self):
+        self.assertEqual(K("Belanja Modal Jalan Kota (Jl. A)", "Pekerjaan Jalan"), ("Jalan", "Fisik"))
+        self.assertEqual(K("Belanja Modal Saluran Pembuang Pasang Surut (Jl. A)", "Pekerjaan Saluran"), ("Saluran", "Fisik"))
+        self.assertEqual(K("Belanja Alat/Bahan untuk Kegiatan Kantor", "ATK")[0], "Lainnya")

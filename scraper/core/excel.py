@@ -103,3 +103,34 @@ def buat_xlsx(per_tahun, gabungan=False):
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def buat_xlsx_tabel(sheets, tautan=None):
+    """Excel generik: sheets = {nama: ([(judul, lebar), ...], [[sel, ...], ...])}. Angka berformat ribuan; header, filter, bekukan baris 1.
+    `tautan` = {nama: kolom_ke_url}: kolom (indeks 0) yang dijadikan hyperlink dari daftar url paralel -> {nama: [url, ...]}."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    for nama, (kolom, rows) in sheets.items():
+        ws = wb.create_sheet(nama[:31])
+        ws.append([k for k, _ in kolom])
+        for i, (_, lebar) in enumerate(kolom, 1):
+            ws.column_dimensions[get_column_letter(i)].width = lebar
+            c = ws.cell(row=1, column=i)
+            c.font, c.fill = Font(bold=True, color="FFFFFF"), _HEADER
+            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        ws.row_dimensions[1].height = 30
+        for r in rows:
+            ws.append(list(r))
+            for c in ws[ws.max_row]:
+                if isinstance(c.value, (int, float)) and not isinstance(c.value, bool) and abs(c.value) >= 1000:
+                    c.number_format = "#,##0"
+        for kol, urls in ((tautan or {}).get(nama) or {}).items():
+            for n, url in enumerate(urls, 2):
+                if url:
+                    ws.cell(row=n, column=kol + 1).hyperlink = url
+                    ws.cell(row=n, column=kol + 1).font = Font(color="1F5FBF", underline="single")
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = f"A1:{get_column_letter(len(kolom))}{max(ws.max_row, 2)}"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()

@@ -5,6 +5,12 @@
       "klpd_nama": "Kota Pontianak",
       "id_satker": 173394,
       "id_satker_per_tahun": {
+        "2014": 69427,
+        "2015": 69427,
+        "2016": 69427,
+        "2017": 69427,
+        "2018": 69427,
+        "2019": 69427,
         "2020": 69427,
         "2021": 69427
       },
@@ -12,7 +18,7 @@
       "tahun": 2026,
       "mak_segmen": 12,
       "klasifikasi": {
-        "catatan": "Aturan dicoba berurutan, yang pertama cocok dipakai. 'teks' = nama paket + uraian. Tidak cocok -> Lainnya.",
+        "catatan": "Aturan dicoba berurutan, yang pertama cocok dipakai. 'teks' = nama paket + uraian. Tidak cocok -> Lainnya. Aturan 'Belanja Modal Pengadaan Jalan Kabupaten/Kota' (Jalan) dan 'Belanja Modal Pengadaan Bangunan Pembuang Pengaman Sungai' (Saluran) adalah penamaan lama (2020 dan sebelumnya).",
         "kategori": [
           {
             "nama": "Jalan",
@@ -24,6 +30,18 @@
             "nama": "Saluran",
             "cocok": {
               "nama_paket": "(?i)^Belanja Modal Saluran Pembuang"
+            }
+          },
+          {
+            "nama": "Jalan",
+            "cocok": {
+              "nama_paket": "(?i)^Belanja\\s+Modal\\s+Pengadaan\\s+Jalan\\s+Kabupaten\\s*/\\s*Kota"
+            }
+          },
+          {
+            "nama": "Saluran",
+            "cocok": {
+              "nama_paket": "(?i)^Belanja\\s+Modal\\s+Pengadaan\\s+Bangunan\\s+Pembuang\\s+Pengaman\\s+Sungai"
             }
           },
           {
@@ -126,6 +144,10 @@
             "Siantan Tengah"
           ]
         }
+      },
+      "spse": {
+        "lpse": "pontianak",
+        "catatan": "LPSE Kota Pontianak (https://spse.inaproc.id/pontianak). Daftar mencakup SEMUA K/L/PD di LPSE ini, bukan hanya Dinas Perkim; pemisahan per dinas butuh halaman detail (menyusul)."
       }
     }
   }

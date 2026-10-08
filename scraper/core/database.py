@@ -157,3 +157,34 @@ def simpan_lokasi(conn, target, data):
                  p["status_mak"], "; ".join(e["mak"] for e in p["mak_entri"]), p["jenis_perbaikan"],
                  "; ".join(p["mak_perbaikan"])))
     return len(data["lokasi"]["jalan"]), len(data["lokasi"]["gang"])
+
+
+KOLOM_SPSE = [("tahun", "Tahun"), ("kode_paket", "Kode paket"), ("nama_paket", "Nama paket"), ("instansi", "K/L/PD"),
+              ("tahapan", "Tahapan"), ("metode", "Metode"), ("kategori", "Jenis pengadaan"), ("tahun_anggaran", "Tahun anggaran"),
+              ("hps_teks", "HPS (ringkas di daftar)"), ("hps_perkiraan", "HPS perkiraan (Rp)"), ("nilai_kontrak_teks", "Nilai kontrak"),
+              ("versi_spse", "Versi SPSE"), ("konsolidasi", "Konsolidasi"), ("oap", "Khusus OAP"), ("link", "Tautan"),
+              ("is_active", "Aktif"), ("first_seen", "Pertama terlihat"), ("last_seen", "Terakhir terlihat")]
+
+
+def baris_spse(conn, lpse, jenis, tahun=None, aktif_saja=False):
+    sql = "SELECT * FROM spse_paket WHERE lpse=? AND jenis=?"
+    par = [lpse, jenis]
+    if tahun not in (None, "semua"):
+        sql += " AND tahun=?"
+        par.append(int(tahun))
+    if aktif_saja:
+        sql += " AND is_active=1"
+    return [dict(r) for r in conn.execute(sql + " ORDER BY tahun DESC, kode_paket DESC", par)]
+
+
+def ekspor_spse_csv(conn, lpse, jenis, path, tahun=None):
+    import csv
+    from pathlib import Path
+    rows = baris_spse(conn, lpse, jenis, tahun)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow([j for _, j in KOLOM_SPSE])
+        for r in rows:
+            w.writerow([("Ya" if r[k] else "Tidak") if k in ("is_active", "konsolidasi", "oap") else r.get(k) for k, _ in KOLOM_SPSE])
+    return len(rows)
