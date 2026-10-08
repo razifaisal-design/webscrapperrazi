@@ -3,95 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rekap RUP per MAK</title>
+<title>Rekap RUP</title>
 <style>
   :root {
     --bg: #f5f6f8; --card: #ffffff; --text: #1b2430; --muted: #66707d; --line: #e2e6eb;
     --accent: #1f5fbf; --accent-soft: #e6eefb; --ok: #1a7f4b; --ok-soft: #e3f5ea;
     --warn: #b45309; --warn-soft: #fdf1dc; --bar: #9db9e6;
+    --jalan: #b45309; --jalan-soft: #fdf1dc; --saluran: #0e7490; --saluran-soft: #def3f8;
+    --lain: #5b6472; --lain-soft: #eceff3;
+    --err: #b42318; --err-soft: #fde8e6;
   }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
+    :root {
       --bg: #12161c; --card: #1a2029; --text: #e6e9ee; --muted: #93a0af; --line: #2a323d;
       --accent: #6aa3f5; --accent-soft: #1d2b42; --ok: #5fcf93; --ok-soft: #17301f;
       --warn: #f0b35a; --warn-soft: #3a2c14; --bar: #3a5a8f;
+      --jalan: #f0b35a; --jalan-soft: #3a2c14; --saluran: #62cbe3; --saluran-soft: #123340;
+      --lain: #a3adba; --lain-soft: #252c36;
+      --err: #ff8a80; --err-soft: #3d1b19;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
-  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
   h1 { font-size: 20px; margin: 0; }
   .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
-  .btn { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn, select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
          padding: 7px 12px; font: inherit; cursor: pointer; }
-  .btn:hover { border-color: var(--accent); }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .btn:hover, select:hover { border-color: var(--accent); }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .live.on .dot { background: var(--ok); animation: p 2s infinite; }
+  .live.err .dot { background: var(--warn); }
+  @keyframes p { 50% { opacity: .35; } }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 12px; }
   .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .kpi .v { font-size: 26px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .kpi .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
   .progress { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 8px; }
-  .progress > i { display: block; height: 100%; background: var(--accent); }
-  .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; }
+  .progress > i { display: block; height: 100%; background: var(--accent); transition: width .6s; }
+  .cats { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .cat { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--c); border-radius: 12px;
+         padding: 14px 16px; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+  .cat:hover, .cat.pilih { box-shadow: 0 0 0 2px var(--c) inset; }
+  .cat .l { font-weight: 650; color: var(--c); }
+  .cat .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .cat .s { color: var(--muted); font-size: 12px; }
+  .cat .rinci { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12.5px; }
+  .cat .rinci b { font-weight: 600; }
+  .gabung { color: var(--muted); font-size: 13px; margin: 0 0 14px 2px; }
+  .note { border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px; }
   .note.ok { background: var(--ok-soft); color: var(--ok); }
   .note.warn { background: var(--warn-soft); color: var(--warn); }
-  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .note.err { background: var(--err-soft); color: var(--err); }
+  .note button { background: none; border: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 6px 12px;
+          font: inherit; cursor: pointer; text-align: left; }
+  .chip.err { border-color: var(--err); } .chip.peringatan { border-color: var(--warn); }
+  .chip.aktif { box-shadow: 0 0 0 2px var(--accent) inset; }
+  .chip b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .chip small { color: var(--muted); }
+  .matriks { margin: 12px; width: auto; }
+  .matriks caption { text-align: left; color: var(--muted); font-size: 12px; padding-bottom: 6px; }
+  .matriks td.salah { background: var(--err-soft); color: var(--err); font-weight: 600; }
+  .matriks td.belum { background: var(--warn-soft); color: var(--warn); }
+  .tag.kesalahan { background: var(--err-soft); color: var(--err); }
+  .tag.peringatan { background: var(--warn-soft); color: var(--warn); }
+  .badge { background: var(--err); color: #fff; border-radius: 99px; font-size: 11px; padding: 0 7px; margin-left: 6px; }
+  .badge.w { background: var(--warn); }
+  .tabs { display: flex; gap: 4px; margin-bottom: -1px; position: relative; flex-wrap: wrap; }
+  .tab { background: transparent; border: 1px solid transparent; border-bottom: none; border-radius: 10px 10px 0 0;
+         padding: 8px 16px; font: inherit; color: var(--muted); cursor: pointer; }
+  .tab.aktif { background: var(--card); border-color: var(--line); color: var(--text); font-weight: 600; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 0 12px 12px 12px; overflow: hidden; }
   .tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); align-items: center; }
-  .tools input { flex: 1 1 240px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  .tools input[type=search] { flex: 1 1 240px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
                  background: var(--bg); color: var(--text); font: inherit; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { background: var(--card); color: var(--text); border: none; padding: 6px 12px; font: inherit; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.aktif { background: var(--accent); color: #fff; }
   .scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em;
-       cursor: pointer; white-space: nowrap; user-select: none; }
+       white-space: nowrap; user-select: none; }
+  th.s { cursor: pointer; }
   th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr.mak { cursor: pointer; }
-  tr.mak:hover { background: var(--accent-soft); }
+  tr.grup { cursor: pointer; }
+  tr.grup:hover { background: var(--accent-soft); }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; word-break: break-all; }
   .bar { height: 4px; background: var(--bar); border-radius: 99px; margin-top: 5px; }
   tr.rinci > td { background: var(--bg); padding: 0 12px 12px 36px; }
   tr.rinci table { margin-top: 8px; }
-  tr.rinci th { cursor: default; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  .tag { font-size: 11px; border-radius: 99px; padding: 1px 8px; background: var(--accent-soft); color: var(--accent); }
+  .tag { font-size: 11px; border-radius: 99px; padding: 1px 8px; background: var(--lain-soft); color: var(--lain); white-space: nowrap; }
+  .tag.Jalan { background: var(--jalan-soft); color: var(--jalan); }
+  .tag.Saluran { background: var(--saluran-soft); color: var(--saluran); }
   .kosong { padding: 28px; text-align: center; color: var(--muted); }
   .caret { display: inline-block; width: 14px; color: var(--muted); }
+  .ringkasan { padding: 10px 12px; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--line); }
+  .ringkasan b { color: var(--text); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div>
-      <h1>Rekap Pagu per MAK</h1>
+      <h1>Rekap RUP — Pagu per MAK, Uraian, Jalan &amp; Saluran</h1>
       <div class="sub" id="sub">Memuat…</div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" id="unduh">Unduh CSV</button>
+    <div class="ctl">
+      <span class="live" id="live"><i class="dot"></i><span id="liveTeks">…</span></span>
+      <label class="sub" for="interval">Auto-refresh</label>
+      <select id="interval" aria-label="Interval auto-refresh">
+        <option value="0">Mati</option>
+        <option value="5">5 detik</option>
+        <option value="10">10 detik</option>
+        <option value="30">30 detik</option>
+        <option value="60">1 menit</option>
+        <option value="300">5 menit</option>
+      </select>
       <button class="btn" id="muat">Muat ulang</button>
+      <button class="btn" id="unduh">Unduh CSV</button>
     </div>
   </header>
 
   <div class="kpis" id="kpis"></div>
+  <div class="cats" id="cats"></div>
+  <p class="gabung" id="gabung"></p>
   <div id="catatan"></div>
 
+  <div class="tabs" id="tabs" role="tablist"></div>
   <div class="panel">
-    <div class="tools">
-      <input id="cari" type="search" placeholder="Cari MAK, nama paket, atau kode RUP…" aria-label="Cari">
-      <span class="sub" id="hitung"></span>
-    </div>
-    <div class="scroll">
-      <table>
-        <thead><tr>
-          <th data-k="mak">MAK</th>
-          <th data-k="jumlah_paket" class="num">Jumlah paket</th>
-          <th data-k="total_pagu" class="num">Total pagu</th>
-        </tr></thead>
-        <tbody id="isi"></tbody>
-      </table>
-    </div>
+    <div class="tools" id="tools"></div>
+    <div id="ringkasan"></div>
+    <div class="scroll"><table id="tabel"></table></div>
   </div>
 </div>
 
@@ -101,32 +154,74 @@ const rp = new Intl.NumberFormat("id-ID");
 const fmt = (n) => "Rp " + rp.format(Math.round(n || 0));
 function ringkas(n) {
   n = n || 0;
-  const t = (x, s) => "Rp " + (x).toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " " + s;
+  const t = (x, s) => "Rp " + x.toLocaleString("id-ID", { maximumFractionDigits: 2 }) + " " + s;
   if (n >= 1e12) return t(n / 1e12, "T");
   if (n >= 1e9) return t(n / 1e9, "M");
   if (n >= 1e6) return t(n / 1e6, "jt");
   return fmt(n);
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const simpan = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const baca = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 
-let data = null, urut = { k: "total_pagu", asc: false }, buka = new Set();
+const WARNA = { Jalan: "var(--jalan)", Saluran: "var(--saluran)", Lainnya: "var(--lain)" };
+let data = null, teksTerakhir = "", tab = baca("rekap_tab", "mak"), kat = baca("rekap_kat", "Jalan"), jenisFilter = "Semua";
+let tingkatFilter = "Semua", jenisTemuan = "Semua";
+let interval = parseInt(baca("rekap_interval", "30"), 10);
+let urut = { mak: { k: "total_pagu", asc: false }, uraian: { k: "total_pagu", asc: false } };
+const buka = { mak: new Set(), uraian: new Set() };
+let timer = null, sedang = false;
 
+/* ---------- ambil data + auto-refresh ---------- */
 async function muat() {
-  $("sub").textContent = "Memuat…";
+  if (sedang) return;
+  sedang = true;
   try {
     const r = await fetch("/api/rekap", { cache: "no-store" });
-    data = await r.json();
-    if (!r.ok) throw new Error(data.error || r.status);
-    gambar();
+    const teks = await r.text();
+    const j = JSON.parse(teks);
+    if (!r.ok) throw new Error(j.error || r.status);
+    if (teks !== teksTerakhir) {   // gambar ulang hanya bila data benar-benar berubah
+      teksTerakhir = teks;
+      data = j;
+      if (data.klasifikasi && !data.klasifikasi[kat]) kat = Object.keys(data.klasifikasi)[0];
+      if (tab === "kategori" && !data.klasifikasi) tab = "mak";
+      if (tab === "periksa" && !data.periksa) tab = "mak";
+      gambar();
+    }
+    status("ok");
   } catch (e) {
-    $("sub").textContent = "Gagal memuat: " + e.message;
+    status("err", e.message);
+  } finally {
+    sedang = false;
   }
 }
+function status(s, pesan) {
+  const el = $("live"), jam = new Date().toLocaleTimeString("id-ID");
+  el.className = "live " + (s === "err" ? "err" : interval > 0 ? "on" : "");
+  $("liveTeks").textContent = s === "err" ? `Gagal memuat (${pesan}) — data lama ditampilkan` : `Diperbarui ${jam}`;
+}
+function aturTimer() {
+  clearInterval(timer);
+  if (interval > 0) timer = setInterval(() => { if (!document.hidden) muat(); }, interval * 1000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && interval > 0) muat(); });
+$("interval").value = String(interval);
+$("interval").addEventListener("change", (e) => {
+  interval = parseInt(e.target.value, 10);
+  simpan("rekap_interval", interval);
+  aturTimer();
+  muat();
+});
+$("muat").addEventListener("click", muat);
 
+/* ---------- gambar ---------- */
 function gambar() {
   const d = data, t = d.target;
+  const sedangDiambil = d.detail_terakhir_diambil && (Date.now() - new Date(d.detail_terakhir_diambil).getTime() < 30000);
   $("sub").textContent = `${t.satker_nama} · ${t.klpd_nama} · TA ${t.tahun}` +
-    (d.detail_terakhir_diambil ? ` · detail terakhir diambil ${d.detail_terakhir_diambil.replace("T", " ")}` : "");
+    (d.detail_terakhir_diambil ? ` · detail terakhir diambil ${d.detail_terakhir_diambil.replace("T", " ")}` : "") +
+    (sedangDiambil ? " · ● pengambilan detail sedang berjalan" : "");
   const persen = d.paket_aktif ? (d.paket_dengan_detail * 100 / d.paket_aktif) : 0;
   $("kpis").innerHTML = `
     <div class="kpi"><div class="l">Paket yang sudah diambil detailnya</div>
@@ -135,74 +230,203 @@ function gambar() {
       <div class="progress"><i style="width:${persen}%"></i></div></div>
     <div class="kpi"><div class="l">Total pagu (paket ber-detail)</div>
       <div class="v">${ringkas(d.total_pagu_mak)}</div><div class="s">${fmt(d.total_pagu_mak)}</div></div>
-    <div class="kpi"><div class="l">Jumlah MAK berbeda</div>
+    <div class="kpi"><div class="l">MAK berbeda</div>
       <div class="v">${rp.format(d.jumlah_mak)}</div>
-      <div class="s">rata-rata ${d.jumlah_mak ? (d.paket_dengan_detail / d.jumlah_mak).toFixed(1) : 0} paket per MAK</div></div>`;
+      <div class="s">rata-rata ${d.jumlah_mak ? (d.paket_dengan_detail / d.jumlah_mak).toFixed(1) : 0} paket per MAK</div></div>
+    <div class="kpi"><div class="l">Uraian unik</div>
+      <div class="v">${rp.format(d.jumlah_uraian)}</div><div class="s">setelah dirapikan (spasi, ';', pengulangan)</div></div>`;
+
+  const k = d.klasifikasi;
+  if (k) {
+    $("cats").innerHTML = Object.entries(k).map(([nama, g]) => `
+      <button class="cat ${nama === kat && tab === "kategori" ? "pilih" : ""}" data-kat="${esc(nama)}" style="--c:${WARNA[nama] || "var(--accent)"}">
+        <div class="l">${esc(nama)}</div>
+        <div class="v">${ringkas(g.total_pagu)}</div>
+        <div class="s">${fmt(g.total_pagu)} · ${rp.format(g.jumlah_paket)} paket · ${d.total_pagu_mak ? (g.total_pagu * 100 / d.total_pagu_mak).toFixed(1) : 0}%</div>
+        <div class="rinci"><span>Fisik <b>${ringkas(g.Fisik.total_pagu)}</b> (${g.Fisik.jumlah_paket})</span>
+        <span>Konsultan <b>${ringkas(g.Konsultan.total_pagu)}</b> (${g.Konsultan.jumlah_paket})</span></div>
+      </button>`).join("");
+    const js = (k.Jalan?.total_pagu || 0) + (k.Saluran?.total_pagu || 0), jp = (k.Jalan?.jumlah_paket || 0) + (k.Saluran?.jumlah_paket || 0);
+    $("gabung").innerHTML = `<b>Jalan + Saluran:</b> ${fmt(js)} · ${rp.format(jp)} paket (${d.total_pagu_mak ? (js * 100 / d.total_pagu_mak).toFixed(1) : 0}% dari total)`;
+  } else { $("cats").innerHTML = ""; $("gabung").textContent = ""; }
+
   $("catatan").innerHTML = d.paket_dengan_detail === 0
     ? `<div class="note warn">Belum ada paket yang detailnya diambil. Jalankan <b>Ambil Detail SiRUP.command</b> dulu.</div>`
     : Math.abs(d.selisih) < 0.5
       ? `<div class="note ok">Cocok: jumlah pagu per MAK (${fmt(d.total_pagu_mak)}) sama dengan jumlah pagu paket di daftar SiRUP.</div>`
       : `<div class="note warn">Perlu dicek: jumlah pagu per MAK berbeda ${fmt(d.selisih)} dari pagu paket di daftar (${fmt(d.total_pagu_daftar)}).</div>`;
-  tabel();
+
+  const pr = d.periksa, nE = pr?.jumlah_kesalahan || 0, nW = pr?.jumlah_peringatan || 0;
+  if (pr && d.paket_dengan_detail > 0) {
+    $("catatan").innerHTML += nE ? `<div class="note err"><b>${rp.format(nE)} kesalahan</b>${nW ? ` dan ${rp.format(nW)} peringatan` : ""} terdeteksi. ${
+        Object.values(pr.ringkas).filter((r) => r.tingkat === "kesalahan").map((r) => `${esc(r.judul)}: ${rp.format(r.jumlah)} paket (${ringkas(r.pagu)})`).join(" · ")} — <button data-tab="periksa">lihat pemeriksaan</button></div>`
+      : nW ? `<div class="note warn">${rp.format(nW)} peringatan perlu dilihat — <button data-tab="periksa">lihat pemeriksaan</button></div>`
+      : `<div class="note ok">Pemeriksaan: tidak ada kesalahan atau peringatan.</div>`;
+  }
+  const badge = nE ? `<span class="badge">${nE}</span>` : nW ? `<span class="badge w">${nW}</span>` : "";
+  const daftarTab = [["mak", "Per MAK"], ["uraian", "Per Uraian"]].concat(k ? [["kategori", "Jalan & Saluran"]] : []).concat(pr ? [["periksa", "Pemeriksaan" + badge]] : []);
+  $("tabs").innerHTML = daftarTab.map(([id, l]) => `<button class="tab ${id === tab ? "aktif" : ""}" data-tab="${id}" role="tab">${l}</button>`).join("");
+  isiPeralatan();
+  isiTabel();
 }
 
-function tabel() {
-  const q = $("cari").value.trim().toLowerCase();
-  let baris = data.per_mak.map((g) => {
-    if (!q) return g;
-    if (g.mak.toLowerCase().includes(q)) return g;
-    const p = g.paket.filter((x) => x.nama_paket.toLowerCase().includes(q) || x.kode_rup.includes(q));
-    return p.length ? { ...g, paket: p, _filter: true } : null;
-  }).filter(Boolean);
-  const { k, asc } = urut;
-  baris.sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k]) : a[k] - b[k]) * (asc ? 1 : -1));
-  const maks = Math.max(1, ...data.per_mak.map((g) => g.total_pagu));
-  $("hitung").textContent = `${baris.length} dari ${data.per_mak.length} MAK`;
-  if (!baris.length) { $("isi").innerHTML = `<tr><td colspan="3" class="kosong">Tidak ada data.</td></tr>`; return; }
-  $("isi").innerHTML = baris.map((g) => {
-    const terbuka = buka.has(g.mak) || (q && g._filter);
-    const rinci = terbuka ? `<tr class="rinci"><td colspan="3"><table>
-      <thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Jenis</th><th class="num">Pagu di MAK ini</th></tr></thead><tbody>
-      ${g.paket.map((p) => `<tr><td class="mono"><a href="${esc(p.link)}" target="_blank" rel="noopener">${esc(p.kode_rup)}</a></td>
-        <td>${esc(p.nama_paket)}</td><td><span class="tag">${esc(p.jenis)}</span></td>
-        <td class="num">${fmt(p.pagu_mak)}${p.pagu_mak !== p.pagu_paket ? `<div class="sub">pagu paket ${fmt(p.pagu_paket)}</div>` : ""}</td></tr>`).join("")}
-      </tbody></table></td></tr>` : "";
-    return `<tr class="mak" data-mak="${esc(g.mak)}">
-      <td><span class="caret">${terbuka ? "▾" : "▸"}</span><span class="mono">${esc(g.mak)}</span>
+let sigAlat = "";
+function isiPeralatan() {
+  // jangan bangun ulang kolom pencarian saat auto-refresh (kursor & ketikan harus tetap)
+  const sig = [tab, kat, jenisFilter, tingkatFilter, jenisTemuan, data.klasifikasi ? Object.keys(data.klasifikasi).join() : ""].join("|");
+  if (sig === sigAlat && $("cari")) return;
+  sigAlat = sig;
+  const cari = $("cari")?.value ?? "";
+  let h = `<input id="cari" type="search" placeholder="Cari nama paket, kode RUP, MAK, atau uraian…" aria-label="Cari" value="${esc(cari)}">`;
+  if (tab === "kategori" && data.klasifikasi) {
+    h += `<span class="seg">${Object.keys(data.klasifikasi).map((n) => `<button data-kat="${esc(n)}" class="${n === kat ? "aktif" : ""}">${esc(n)}</button>`).join("")}</span>`;
+    h += `<span class="seg">${["Semua", "Fisik", "Konsultan"].map((j) => `<button data-jenis="${j}" class="${j === jenisFilter ? "aktif" : ""}">${j}</button>`).join("")}</span>`;
+  }
+  if (tab === "periksa") {
+    h += `<span class="seg">${["Semua", "kesalahan", "peringatan"].map((j) => `<button data-tingkat="${j}" class="${j === tingkatFilter ? "aktif" : ""}">${j === "Semua" ? "Semua" : j[0].toUpperCase() + j.slice(1)}</button>`).join("")}</span>`;
+    h += `<select id="selJenis" aria-label="Jenis temuan"><option value="Semua">Semua jenis temuan</option>${Object.entries(data.periksa.ringkas).map(([k2, r]) => `<option value="${k2}" ${k2 === jenisTemuan ? "selected" : ""}>${esc(r.judul)} (${r.jumlah})</option>`).join("")}</select>`;
+  }
+  h += `<span class="sub" id="hitung"></span>`;
+  $("tools").innerHTML = h;
+  $("cari").addEventListener("input", isiTabel);
+  $("selJenis")?.addEventListener("change", (e) => { jenisTemuan = e.target.value; isiPeralatan(); isiTabel(); });
+}
+
+function cocok(p, q) {
+  return !q || p.nama_paket.toLowerCase().includes(q) || p.kode_rup.includes(q) || p.uraian.toLowerCase().includes(q);
+}
+const tagKat = (p) => p.kategori ? `<span class="tag ${esc(p.kategori)}">${esc(p.kategori)}${p.kategori !== "Lainnya" ? " · " + esc(p.jenis_pekerjaan) : ""}</span>` : "";
+const barisPaket = (p, nilai, catatan) => `<tr>
+  <td class="mono"><a href="${esc(p.link)}" target="_blank" rel="noopener">${esc(p.kode_rup)}</a></td>
+  <td>${esc(p.nama_paket)}</td><td>${esc(p.uraian)}</td><td>${tagKat(p)}</td>
+  <td class="num">${fmt(nilai)}${catatan ? `<div class="sub">${catatan}</div>` : ""}</td></tr>`;
+const kepalaPaket = `<thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Uraian</th><th>Kategori</th><th class="num">Pagu</th></tr></thead>`;
+
+function isiTabel() {
+  localStorage_tab();
+  const q = ($("cari")?.value || "").trim().toLowerCase();
+  if (tab === "kategori") return isiKategori(q);
+  if (tab === "periksa") return isiPeriksa(q);
+  const kunci = tab === "mak" ? "mak" : "uraian", judul = tab === "mak" ? "MAK" : "Uraian";
+  const sumber = tab === "mak" ? data.per_mak : data.per_uraian;
+  let baris = [];
+  for (const g of sumber) {
+    const items = g.paket.map((x) => tab === "mak" ? { p: data.paket[x[0]], nilai: x[1] } : { p: data.paket[x], nilai: data.paket[x].pagu });
+    if (!q || g[kunci].toLowerCase().includes(q)) baris.push({ g, items, saring: false });
+    else { const f = items.filter((i) => cocok(i.p, q)); if (f.length) baris.push({ g, items: f, saring: true }); }
+  }
+  const { k, asc } = urut[tab];
+  baris.sort((a, b) => (typeof a.g[k] === "string" ? a.g[k].localeCompare(b.g[k]) : a.g[k] - b.g[k]) * (asc ? 1 : -1));
+  const maks = Math.max(1, ...sumber.map((g) => g.total_pagu));
+  $("hitung").textContent = `${baris.length} dari ${sumber.length} ${judul}`;
+  $("ringkasan").innerHTML = "";
+  const panah = (c) => urut[tab].k === c ? (urut[tab].asc ? " ▲" : " ▼") : "";
+  $("tabel").innerHTML = `<thead><tr>
+    <th class="s" data-k="${kunci}">${judul}${panah(kunci)}</th>
+    <th class="s num" data-k="jumlah_paket">Jumlah paket${panah("jumlah_paket")}</th>
+    <th class="s num" data-k="total_pagu">Total pagu${panah("total_pagu")}</th></tr></thead><tbody>` +
+    (baris.length ? baris.map(({ g, items, saring }) => {
+      const id = g[kunci], terbuka = buka[tab].has(id) || (q && saring);
+      const rinci = terbuka ? `<tr class="rinci"><td colspan="3"><table>${kepalaPaket}<tbody>${items.map((i) =>
+        barisPaket(i.p, i.nilai, tab === "mak" && i.nilai !== i.p.pagu ? `pagu paket ${fmt(i.p.pagu)}` : "")).join("")}</tbody></table></td></tr>` : "";
+      return `<tr class="grup" data-id="${esc(id)}"><td><span class="caret">${terbuka ? "▾" : "▸"}</span><span class="${tab === "mak" ? "mono" : ""}">${esc(id)}</span>
         <div class="bar" style="width:${Math.max(1, g.total_pagu * 100 / maks)}%"></div></td>
-      <td class="num">${rp.format(g.jumlah_paket)}</td><td class="num">${fmt(g.total_pagu)}</td></tr>${rinci}`;
-  }).join("");
+        <td class="num">${rp.format(g.jumlah_paket)}</td><td class="num">${fmt(g.total_pagu)}</td></tr>${rinci}`;
+    }).join("") : `<tr><td colspan="3" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
 }
 
-$("isi").addEventListener("click", (e) => {
-  const tr = e.target.closest("tr.mak");
-  if (!tr || e.target.closest("a")) return;
-  const m = tr.dataset.mak;
-  buka.has(m) ? buka.delete(m) : buka.add(m);
-  tabel();
+function isiKategori(q) {
+  const g = data.klasifikasi[kat];
+  const items = g.paket.map((k) => data.paket[k])
+    .filter((p) => (jenisFilter === "Semua" || p.jenis_pekerjaan === jenisFilter) && cocok(p, q))
+    .sort((a, b) => b.pagu - a.pagu);
+  const total = items.reduce((s, p) => s + p.pagu, 0);
+  $("hitung").textContent = `${items.length} paket`;
+  $("ringkasan").innerHTML = `<b>${esc(kat)}</b>${jenisFilter !== "Semua" ? " · " + jenisFilter : ""}${q ? " · cocok dengan pencarian" : ""}:
+    <b>${fmt(total)}</b> dari ${rp.format(items.length)} paket` +
+    (kat === "Lainnya" ? ` — paket di sini belum masuk Jalan maupun Saluran; periksa bila ada yang seharusnya masuk (aturan di config/targets.json).` : "");
+  $("tabel").innerHTML = kepalaPaket + "<tbody>" + (items.length ? items.map((p) => barisPaket(p, p.pagu)).join("") : `<tr><td colspan="5" class="kosong">Tidak ada data.</td></tr>`) + "</tbody>";
+}
+function isiPeriksa(q) {
+  const pr = data.periksa;
+  const chips = Object.entries(pr.ringkas).map(([k2, r]) => `<button class="chip ${r.tingkat === "kesalahan" ? "err" : "peringatan"} ${k2 === jenisTemuan ? "aktif" : ""}" data-jenistemuan="${k2}">
+    <small>${r.tingkat === "kesalahan" ? "Kesalahan" : "Peringatan"}</small><b>${esc(r.judul)}</b><small>${rp.format(r.jumlah)} paket · ${ringkas(r.pagu)}</small></button>`).join("");
+  let mx = "";
+  if (pr.matriks) {
+    const m = pr.matriks, cell = (b, kol) => {
+      const c = m.nilai[b][kol], salah = kol !== "Belum dipetakan" && kol !== b && c.paket > 0, belum = kol === "Belum dipetakan" && c.paket > 0;
+      return `<td class="num ${salah ? "salah" : belum ? "belum" : ""}">${c.paket ? fmt(c.pagu) + `<div class="sub">${rp.format(c.paket)} paket</div>` : "–"}</td>`;
+    };
+    mx = `<table class="matriks"><caption>Rekonsiliasi: kategori paket (dari nama/uraian) × jenis MAK yang dipakai (dari pemetaan di config). Sel merah = kategori dan MAK tidak cocok.</caption>
+      <thead><tr><th>Kategori paket ↓ / MAK →</th>${m.kolom.map((kol) => `<th class="num">${kol === "Belum dipetakan" ? "MAK belum dipetakan" : "MAK " + esc(kol)}</th>`).join("")}</tr></thead>
+      <tbody>${m.baris.map((b) => `<tr><td><b>${esc(b)}</b></td>${m.kolom.map((kol) => cell(b, kol)).join("")}</tr>`).join("")}</tbody></table>`;
+  }
+  const items = pr.temuan.filter((t) => (tingkatFilter === "Semua" || t.tingkat === tingkatFilter) &&
+    (jenisTemuan === "Semua" || t.jenis === jenisTemuan) &&
+    (!q || t.nama_paket.toLowerCase().includes(q) || t.kode_rup.includes(q) || t.pesan.toLowerCase().includes(q)));
+  $("hitung").textContent = `${items.length} temuan`;
+  $("ringkasan").innerHTML = (chips ? `<div class="chips">${chips}</div>` : `<div class="ringkasan">Tidak ada temuan.</div>`) + mx;
+  $("tabel").innerHTML = `<thead><tr><th>Kode RUP</th><th>Nama paket</th><th>Temuan</th><th>Kategori</th><th class="num">Pagu terkait</th></tr></thead><tbody>` +
+    (items.length ? items.map((t) => `<tr>
+      <td class="mono"><a href="${esc(t.link)}" target="_blank" rel="noopener">${esc(t.kode_rup)}</a></td>
+      <td>${esc(t.nama_paket)}</td>
+      <td><span class="tag ${t.tingkat}">${esc(t.judul)}</span><div class="sub">${esc(t.pesan)}</div></td>
+      <td>${tagKat(t)}</td><td class="num">${fmt(t.pagu)}</td></tr>`).join("") : `<tr><td colspan="5" class="kosong">Tidak ada temuan untuk filter ini.</td></tr>`) + "</tbody>";
+}
+function localStorage_tab() { simpan("rekap_tab", tab); simpan("rekap_kat", kat); }
+
+/* ---------- interaksi ---------- */
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-kat]");
+  if (c) { kat = c.dataset.kat; tab = "kategori"; gambar(); return; }
+  const t = e.target.closest("[data-tab]");
+  if (t) { tab = t.dataset.tab; gambar(); return; }
+  const ti = e.target.closest("[data-tingkat]");
+  if (ti) { tingkatFilter = ti.dataset.tingkat; isiPeralatan(); isiTabel(); return; }
+  const jt = e.target.closest("[data-jenistemuan]");
+  if (jt) { jenisTemuan = jenisTemuan === jt.dataset.jenistemuan ? "Semua" : jt.dataset.jenistemuan; isiPeralatan(); isiTabel(); return; }
+  const j = e.target.closest("[data-jenis]");
+  if (j) { jenisFilter = j.dataset.jenis; isiPeralatan(); isiTabel(); return; }
+  const th = e.target.closest("th[data-k]");
+  if (th && tab !== "kategori" && tab !== "periksa") {
+    const k = th.dataset.k, u = urut[tab];
+    urut[tab] = { k, asc: u.k === k ? !u.asc : (k === "mak" || k === "uraian") };
+    isiTabel(); return;
+  }
+  const tr = e.target.closest("tr.grup");
+  if (tr && !e.target.closest("a")) {
+    const id = tr.dataset.id;
+    buka[tab].has(id) ? buka[tab].delete(id) : buka[tab].add(id);
+    isiTabel();
+  }
 });
-document.querySelectorAll("th[data-k]").forEach((th) => th.addEventListener("click", () => {
-  const k = th.dataset.k;
-  urut = { k, asc: urut.k === k ? !urut.asc : k === "mak" };
-  tabel();
-}));
-$("cari").addEventListener("input", tabel);
-$("muat").addEventListener("click", muat);
 $("unduh").addEventListener("click", () => {
   if (!data) return;
   const c = (s) => '"' + String(s ?? "").replace(/"/g, '""') + '"';
-  const baris = [["mak", "jumlah_paket", "total_pagu"].join(",")]
-    .concat(data.per_mak.map((g) => [c(g.mak), g.jumlah_paket, g.total_pagu].join(",")));
-  const blob = new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  let baris, nama;
+  if (tab === "periksa") {
+    nama = "temuan_pemeriksaan.csv";
+    baris = [["tingkat", "jenis", "kode_rup", "nama_paket", "pesan", "pagu_terkait", "link"].join(",")].concat(
+      data.periksa.temuan.map((t) => [t.tingkat, t.jenis, t.kode_rup, c(t.nama_paket), c(t.pesan), t.pagu, t.link].join(",")));
+  } else if (tab === "kategori") {
+    nama = "rekap_" + kat.toLowerCase() + ".csv";
+    baris = [["kode_rup", "nama_paket", "kategori", "jenis_pekerjaan", "uraian", "pagu", "link"].join(",")].concat(
+      data.klasifikasi[kat].paket.map((k) => data.paket[k]).filter((p) => jenisFilter === "Semua" || p.jenis_pekerjaan === jenisFilter)
+        .map((p) => [p.kode_rup, c(p.nama_paket), p.kategori, p.jenis_pekerjaan, c(p.uraian), p.pagu, p.link].join(",")));
+  } else {
+    const kunci = tab === "mak" ? "mak" : "uraian", src = tab === "mak" ? data.per_mak : data.per_uraian;
+    nama = "rekap_per_" + kunci + ".csv";
+    baris = [[kunci, "jumlah_paket", "total_pagu"].join(",")].concat(src.map((g) => [c(g[kunci]), g.jumlah_paket, g.total_pagu].join(",")));
+  }
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "rekap_pagu_per_mak.csv";
+  a.href = URL.createObjectURL(new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+  a.download = nama;
   a.click();
   URL.revokeObjectURL(a.href);
 });
 
+aturTimer();
 muat();
-setInterval(muat, 5 * 60 * 1000);
 </script>
 </body>
 </html>

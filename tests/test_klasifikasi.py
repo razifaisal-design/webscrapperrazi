@@ -1,0 +1,65 @@
+import json
+import unittest
+from pathlib import Path
+
+from scraper.core.klasifikasi import AturanError, Pengklasifikasi
+from scraper.core.rekap import norm_uraian
+
+ATURAN = json.loads((Path(__file__).parents[1] / "config" / "targets.json").read_text(encoding="utf-8")
+                    )["targets"]["perkim-pontianak"]["klasifikasi"]
+K = Pengklasifikasi(ATURAN)
+
+
+class TestKlasifikasiPerkim(unittest.TestCase):
+    def cek(self, nama, uraian, kategori, jenis):
+        self.assertEqual(K(nama, uraian), (kategori, jenis), nama)
+
+    def test_belanja_modal_jalan_kota_adalah_jalan(self):
+        self.cek("Belanja Modal Jalan Kota (Jl. Flora, Gg. Flora 4)", "Pekerjaan Jalan", "Jalan", "Fisik")
+
+    def test_belanja_modal_saluran_pembuang_adalah_saluran(self):
+        self.cek("Belanja Modal Saluran Pembuang Pasang Beton Pracetak", "Pekerjaan Saluran", "Saluran", "Fisik")
+
+    def test_belanja_modal_jalan_kota_pengawasan_adalah_jalan_konsultan(self):
+        self.cek("Belanja Modal Jalan Kota-Pengawasan di Kecamatan Pontianak Timur",
+                 "Belanja Jasa Konsultansi Pengawasan Rekayasa; Belanja Modal Jalan Kota - Pengawasan", "Jalan", "Konsultan")
+
+    def test_konsultan_terbagi_ke_jalan_dan_saluran(self):
+        self.cek("Pengawasan PSU Jalan Tahun 2026 Kecamatan Pontianak Barat", "Pengawasan Jalan", "Jalan", "Konsultan")
+        self.cek("Perencanaan PSU Saluran Tahun 2026 Kecamatan Pontianak Barat",
+                 "Pekerjaan Konsultan Perencanaan Saluran", "Saluran", "Konsultan")
+        self.cek("Pengawasan PSU Jalan Tahun 2026 Timur - (Tahap 2)",
+                 "Belanja Jasa Konsultansi Pengawasan Rekayasa-Jasa Pengawas Pekerjaan Konstruksi Teknik Sipil Transportasi",
+                 "Jalan", "Konsultan")
+
+    def test_yang_bukan_jalan_atau_saluran_masuk_lainnya(self):
+        self.cek("Fotocopy", "Fotocopy", "Lainnya", "Fisik")
+        self.cek("Belanja Perjalanan Dinas Biasa Sub Kegiatan Rapat", "72 Perjalanan Dinas Biasa", "Lainnya", "Fisik")  # 'Perjalanan' != 'jalan'
+        self.cek("Belanja Makanan dan Minuman (Perencanaan Penyediaan PSU Perumahan)", "Belanja Makanan dan Minuman", "Lainnya", "Konsultan")
+        self.cek("Belanja Jasa Konsultansi Perencanaan Penataan Ruang", "Belanja Jasa Konsultansi Perencanaan Penataan Ruang", "Lainnya", "Konsultan")
+
+    def test_ambigu_jalan_dan_saluran_sekaligus_tidak_dipaksa(self):
+        self.cek("Perencanaan Jalan dan Saluran", "Perencanaan Jalan dan Saluran", "Lainnya", "Konsultan")
+
+
+class TestAturanSalah(unittest.TestCase):
+    def test_regex_rusak(self):
+        with self.assertRaises(AturanError):
+            Pengklasifikasi({"kategori": [{"nama": "X", "cocok": {"nama_paket": "("}}]})
+
+    def test_field_tidak_dikenal(self):
+        with self.assertRaises(AturanError):
+            Pengklasifikasi({"kategori": [{"nama": "X", "cocok": {"warna": "a"}}]})
+
+
+class TestNormUraian(unittest.TestCase):
+    def test_rapikan(self):
+        self.assertEqual(norm_uraian("Pekerjaan Jalan;"), "Pekerjaan Jalan")
+        self.assertEqual(norm_uraian("Tinta Printer; Tinta Printer;  tinta printer"), "Tinta Printer")
+        self.assertEqual(norm_uraian("A;  B ; A"), "A; B")
+        self.assertEqual(norm_uraian(""), "(tanpa uraian)")
+        self.assertEqual(norm_uraian(None), "(tanpa uraian)")
+
+
+if __name__ == "__main__":
+    unittest.main()

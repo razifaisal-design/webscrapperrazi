@@ -5,6 +5,8 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from .mak import mak_inti, norm_mak
+
 DB_DEFAULT = Path(__file__).resolve().parents[2] / "data" / "pantau.db"
 
 SCHEMA = """
@@ -207,7 +209,10 @@ def simpan_detail(conn, run_id, kode, nama, pagu, d):
         lama = conn.execute("SELECT * FROM sirup_detail WHERE kode_rup=?", (kode,)).fetchone()
         if lama is not None and lama["error"] is None:
             for f in DETAIL_DIPANTAU:
-                if (lama[f] or "") != (baru[f] or ""):
+                a, b = lama[f] or "", baru[f] or ""
+                if f == "mak":                      # angka setelah segmen ke-12 diabaikan
+                    a, b = mak_inti(a), mak_inti(b)
+                if a != b:
                     conn.execute(
                         "INSERT INTO paket_events(run_id,sumber,kunci,nama_paket,jenis_event,field,nilai_lama,nilai_baru,waktu) "
                         "VALUES(?,?,?,?,?,?,?,?,?)",
@@ -235,7 +240,7 @@ KOLOM_CSV = ["kode_rup", "jenis", "nama_paket", "penyelenggara", "pagu", "metode
              "tanggal_umumkan", "link", "first_seen", "last_seen"]
 
 
-def ekspor_csv(conn, id_satker, tahun, path):
+def ekspor_csv(conn, id_satker, tahun, path, mak_segmen=12):
     """CSV gabungan daftar + detail (kolom detail kosong bila belum diambil)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -253,6 +258,7 @@ def ekspor_csv(conn, id_satker, tahun, path):
                 extra.setdefault("kontrak_akhir", extra.get("pelaksanaan_akhir"))
             baris = dict(r)
             baris["lokasi"] = r["lokasi_ringkas"]
+            baris["mak"] = mak_inti(r["mak"], mak_segmen)
             baris.update({k: extra.get(k) for k in ("jenis_pengadaan", "produk_dalam_negeri", "usaha_kecil",
                                                     "kontrak_mulai", "kontrak_akhir", "pemilihan_mulai", "tanggal_umumkan")})
             w.writerow([baris.get(k) for k in KOLOM_CSV])

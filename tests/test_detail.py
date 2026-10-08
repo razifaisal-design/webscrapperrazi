@@ -57,6 +57,7 @@ def paket(kode, pagu=100, nama="P"):
 class TestDetailDb(unittest.TestCase):
     def setUp(self):
         self.conn = db.buka(":memory:")
+        self.addCleanup(self.conn.close)
         rid = db.mulai_run(self.conn, 1, 2026)
         db.finalisasi(self.conn, rid, [paket("1"), paket("2")], 1, 2026)
         db.tutup_run(self.conn, rid, "success", 2, 2)

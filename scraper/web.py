@@ -8,7 +8,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .cli import muat_target
-from .core import db, rekap
+from .core import rekap
+from .core.klasifikasi import AturanError
 
 HTML = Path(__file__).with_name("dashboard.html")
 
@@ -41,13 +42,15 @@ def buat_handler(db_path):
                     nama, t = muat_target(parse_qs(u.query).get("target", [None])[0])
                     conn = buka_readonly(db_path)
                     try:
-                        data = rekap.rekap_mak(conn, t["id_satker"], t["tahun"])
+                        data = rekap.lengkap(conn, t)
                     finally:
                         conn.close()
-                    data["target"] = {"nama": nama, **t}
+                    data["target"] = {"nama": nama, **{k: v for k, v in t.items() if k not in ("klasifikasi", "periksa")}}
                     return self._json(200, data)
                 except sqlite3.Error as e:
                     return self._json(500, {"error": f"Database belum siap: {e}"})
+                except AturanError as e:
+                    return self._json(500, {"error": f"Aturan klasifikasi salah: {e}"})
                 except SystemExit as e:
                     return self._json(400, {"error": str(e)})
             self._kirim(404, "text/plain; charset=utf-8", b"Tidak ditemukan")

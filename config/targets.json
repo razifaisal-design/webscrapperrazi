@@ -5,7 +5,73 @@
       "klpd_nama": "Kota Pontianak",
       "id_satker": 173394,
       "satker_nama": "DINAS PERUMAHAN RAKYAT DAN KAWASAN PERMUKIMAN",
-      "tahun": 2026
+      "tahun": 2026,
+      "mak_segmen": 12,
+      "klasifikasi": {
+        "catatan": "Aturan dicoba berurutan, yang pertama cocok dipakai. 'teks' = nama paket + uraian. Tidak cocok -> Lainnya.",
+        "kategori": [
+          {
+            "nama": "Jalan",
+            "cocok": {
+              "nama_paket": "(?i)^Belanja Modal Jalan Kota"
+            }
+          },
+          {
+            "nama": "Saluran",
+            "cocok": {
+              "nama_paket": "(?i)^Belanja Modal Saluran Pembuang"
+            }
+          },
+          {
+            "nama": "Jalan",
+            "cocok": {
+              "uraian": "(?i)^Pekerjaan Jalan$"
+            }
+          },
+          {
+            "nama": "Saluran",
+            "cocok": {
+              "uraian": "(?i)^Pekerjaan Saluran$"
+            }
+          },
+          {
+            "nama": "Jalan",
+            "cocok": {
+              "teks": "(?i)^(?=.*\\b(perencanaan|pengawasan|konsultan|konsultansi)\\b)(?=.*\\bjalan\\b)(?!.*\\bsaluran\\b)"
+            }
+          },
+          {
+            "nama": "Saluran",
+            "cocok": {
+              "teks": "(?i)^(?=.*\\b(perencanaan|pengawasan|konsultan|konsultansi)\\b)(?=.*\\bsaluran\\b)(?!.*\\bjalan\\b)"
+            }
+          }
+        ],
+        "konsultan": "(?i)\\b(perencanaan|pengawasan|konsultan|konsultansi)\\b"
+      },
+      "periksa": {
+        "catatan": "mak_kategori: awalan kode MAK (sampai sub kegiatan) -> kategori yang SEHARUSNYA. Paket yang kategorinya (dari nama/uraian) beda dengan kategori MAK-nya ditandai kesalahan. satuan_salah: satuan volume yang jelas bertentangan dengan kategori.",
+        "mak_kategori": [
+          {
+            "awalan": "1.04.05.2.01.0012",
+            "kategori": "Jalan"
+          },
+          {
+            "awalan": "1.04.05.2.01.0011",
+            "kategori": "Saluran"
+          }
+        ],
+        "satuan_salah": {
+          "Jalan": [
+            "M1",
+            "ML",
+            "M'"
+          ],
+          "Saluran": [
+            "M2"
+          ]
+        }
+      }
     }
   }
 }

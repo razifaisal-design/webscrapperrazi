@@ -1,4 +1,4 @@
-"""CLI:  python -m scraper run sirup | detail sirup | events"""
+"""CLI:  python -m scraper run sirup | detail sirup | periksa | web | events"""
 import argparse
 import json
 import sys
@@ -66,7 +66,7 @@ def cmd_run(args):
         print(f"Perubahan: {r['baru']} baru, {r['berubah']} berubah, {r['hilang']} hilang, "
               f"{r['muncul_kembali']} muncul kembali, {r['revisi']} kemungkinan revisi RUP")
     if not args.no_csv:
-        n = db.ekspor_csv(conn, target["id_satker"], target["tahun"], csv_path(target))
+        n = db.ekspor_csv(conn, target["id_satker"], target["tahun"], csv_path(target), target.get("mak_segmen", 12))
         print(f"CSV : {csv_path(target)} ({n} baris, termasuk kolom link)")
     print(f"DB  : {Path(args.db)}")
     return 0
@@ -113,9 +113,39 @@ def cmd_detail(args):
     print(f"\nSelesai. Detail berhasil: {ok}, gagal: {len(gagal)}")
     for k, m in gagal[:10]:
         print(f"  gagal {k}: {m}")
-    n = db.ekspor_csv(conn, target["id_satker"], target["tahun"], csv_path(target))
+    n = db.ekspor_csv(conn, target["id_satker"], target["tahun"], csv_path(target), target.get("mak_segmen", 12))
     print(f"CSV : {csv_path(target)} ({n} baris, sudah berisi lokasi/volume/uraian/spesifikasi)")
     return 0 if not gagal else 4
+
+
+def cmd_periksa(args):
+    import csv
+    from .core import rekap
+    nama, target = muat_target(args.target)
+    conn = db.buka(args.db)
+    data = rekap.lengkap(conn, target)
+    pr = data["periksa"]
+    print(f"{target['satker_nama']} - {data['paket_dengan_detail']} paket ber-detail (dari {data['paket_aktif']} aktif)")
+    print(f"Kesalahan: {pr['jumlah_kesalahan']}   Peringatan: {pr['jumlah_peringatan']}\n")
+    for jenis, r in pr["ringkas"].items():
+        print(f"  [{r['tingkat']:10}] {r['judul']:<34} {r['jumlah']:>4} paket   Rp {r['pagu']:,.0f}".replace(",", "."))
+    if pr["matriks"]:
+        m = pr["matriks"]
+        print("\nRekonsiliasi kategori paket x jenis MAK (Rp):")
+        for b in m["baris"]:
+            print("  " + f"{b:<8}" + "  ".join(f"{k}: {m['nilai'][b][k]['pagu']:,.0f} ({m['nilai'][b][k]['paket']})".replace(",", ".") for k in m["kolom"]))
+    tampil = [t for t in pr["temuan"] if t["tingkat"] == "kesalahan"][: args.limit]
+    if tampil:
+        print(f"\n{len(tampil)} kesalahan teratas:")
+        for t in tampil:
+            print(f"  {t['kode_rup']}  {t['nama_paket'][:60]}\n      -> {t['pesan']}")
+    path = ROOT / "data" / f"temuan_{target['id_satker']}_{target['tahun']}.csv"
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(["tingkat", "jenis", "kode_rup", "nama_paket", "pesan", "pagu_terkait", "link"])
+        w.writerows([t["tingkat"], t["jenis"], t["kode_rup"], t["nama_paket"], t["pesan"], t["pagu"], t["link"]] for t in pr["temuan"])
+    print(f"\nCSV : {path} ({len(pr['temuan'])} temuan)")
+    return 1 if pr["jumlah_kesalahan"] else 0
 
 
 def cmd_web(args):
@@ -157,6 +187,10 @@ def main(argv=None):
     d.add_argument("--limit", type=int, help="ambil hanya N paket (untuk uji coba)")
     d.add_argument("--semua", action="store_true", help="ambil ulang semua, bukan hanya yang belum/berubah")
     d.set_defaults(fn=cmd_detail)
+    k = sub.add_parser("periksa", help="deteksi kesalahan (mis. Saluran tercatat di MAK Jalan)")
+    k.add_argument("--target")
+    k.add_argument("--limit", type=int, default=10, help="jumlah kesalahan yang ditampilkan di layar")
+    k.set_defaults(fn=cmd_periksa)
     w = sub.add_parser("web", help="buka dashboard lokal di browser")
     w.add_argument("--port", type=int, default=8765)
     w.add_argument("--no-browser", action="store_true")

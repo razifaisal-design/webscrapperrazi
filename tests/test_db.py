@@ -21,6 +21,7 @@ def jalankan(conn, paket):
 class TestFinalisasi(unittest.TestCase):
     def setUp(self):
         self.conn = db.buka(":memory:")
+        self.addCleanup(self.conn.close)
 
     def events(self):
         return [tuple(r) for r in self.conn.execute("SELECT jenis_event,kunci,field,nilai_lama,nilai_baru,selisih FROM paket_events ORDER BY id")]
