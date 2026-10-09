@@ -60,8 +60,14 @@ CREATE TABLE IF NOT EXISTS spse_detail (
   kontrak_json TEXT, nilai_kontrak NUMERIC,            -- nilai_kontrak terisi = PPK sudah mengisi e-kontrak
   pemenang_terisi INTEGER, kontrak_terisi INTEGER,
   diambil_pada TEXT, error TEXT,
+  tahapan_daftar TEXT,                                -- tahapan di DAFTAR saat detail diambil (pembanding; teks tahap di detail bisa berbeda, mis. paket batal)
   lengkap INTEGER DEFAULT 0,                          -- 1 = Pemenang + Pemenang Berkontrak + Jadwal (+ riwayat) ikut diambil
   PRIMARY KEY (lpse, jenis, kode_paket)
+);
+CREATE TABLE IF NOT EXISTS sirup_luar_daftar (                  -- RUP yang dirujuk SPSE tetapi tidak ada di daftar satker; dicek langsung lewat kode RUP
+  kode_rup TEXT PRIMARY KEY, ditemukan INTEGER,                  -- 1 = halaman detail RUP ada; 0 = SiRUP tidak punya RUP itu
+  nama_paket TEXT, satker_nama TEXT, klpd_nama TEXT, tahun_anggaran TEXT, pagu NUMERIC, metode_pemilihan TEXT,
+  jenis_pengadaan TEXT, mak TEXT, tanggal_umumkan TEXT, link TEXT, diambil_pada TEXT, error TEXT
 );
 CREATE TABLE IF NOT EXISTS spse_jadwal (
   lpse TEXT NOT NULL, jenis TEXT NOT NULL, kode_paket TEXT NOT NULL, no INTEGER NOT NULL,
@@ -98,6 +104,11 @@ def buka(path=DB_DEFAULT):
             conn.execute(f"ALTER TABLE sirup_paket ADD COLUMN {kol} TEXT")
     if "lengkap" not in {r[1] for r in conn.execute("PRAGMA table_info(spse_detail)")}:
         conn.execute("ALTER TABLE spse_detail ADD COLUMN lengkap INTEGER DEFAULT 0")
+    if "tahapan_daftar" not in {r[1] for r in conn.execute("PRAGMA table_info(spse_detail)")}:
+        conn.execute("ALTER TABLE spse_detail ADD COLUMN tahapan_daftar TEXT")
+        with conn:                                          # detail yang sudah ada: anggap tahapan daftar saat ini = saat diambil
+            conn.execute("UPDATE spse_detail SET tahapan_daftar=(SELECT p.tahapan FROM spse_paket p WHERE p.lpse=spse_detail.lpse AND "
+                         "p.jenis=spse_detail.jenis AND p.kode_paket=spse_detail.kode_paket) WHERE error IS NULL AND diambil_pada IS NOT NULL")
     # spse_detail lama: 'APBD 2026' dalam satu kolom -> sumber_dana 'APBD' + tahun_anggaran 2026
     if "sumber_dana" not in {r[1] for r in conn.execute("PRAGMA table_info(spse_detail)")}:
         conn.execute("ALTER TABLE spse_detail ADD COLUMN sumber_dana TEXT")
@@ -458,9 +469,10 @@ def simpan_detail_spse(conn, lpse, jenis, kode, detail=None, error=None, jadwal=
             return
         nilai = [json.dumps(detail[k], ensure_ascii=False) if k in _JSON_DETAIL else detail[k] for k in _KOLOM_DETAIL]
         kol = ",".join(_KOLOM_DETAIL)
-        conn.execute(f"INSERT OR REPLACE INTO spse_detail(lpse,jenis,kode_paket,{kol},diambil_pada,error,lengkap) "
-                     f"VALUES(?,?,?,{','.join('?' * len(_KOLOM_DETAIL))},?,NULL,?)",
-                     (lpse, jenis, kode, *nilai, waktu, 1 if jadwal is not None else 0))
+        daftar = conn.execute("SELECT tahapan FROM spse_paket WHERE lpse=? AND jenis=? AND kode_paket=?", (lpse, jenis, kode)).fetchone()
+        conn.execute(f"INSERT OR REPLACE INTO spse_detail(lpse,jenis,kode_paket,{kol},diambil_pada,error,lengkap,tahapan_daftar) "
+                     f"VALUES(?,?,?,{','.join('?' * len(_KOLOM_DETAIL))},?,NULL,?,?)",
+                     (lpse, jenis, kode, *nilai, waktu, 1 if jadwal is not None else 0, daftar[0] if daftar else None))
         if jadwal is not None:
             conn.execute("DELETE FROM spse_jadwal WHERE lpse=? AND jenis=? AND kode_paket=?", (lpse, jenis, kode))
             for t in jadwal:
@@ -474,24 +486,57 @@ def norm_satker(teks):
     return " ".join((teks or "").upper().split())
 
 
-def paket_perlu_detail_spse(conn, lpse, jenis, tahun, usia_hari=7, semua=False, aktif_saja=True, satker=None):
-    """Kode paket yang perlu diambil. Aturan:
-      * belum pernah diambil, atau gagal sebelumnya  -> ambil;
-      * `satker` diberikan (hanya instansi itu yang dirinci): paket instansi lain cukup diambil SEKALI (cukup untuk tahu satker
-        dan kode RUP-nya); paket instansi itu diambil ulang bila belum lengkap, tahapan di daftar berubah, atau lebih tua dari `usia_hari`;
-      * `satker` kosong: semua paket diikuti aturan yang sama dengan paket instansi itu.
-    Urut menurut kode paket."""
-    sql = ("SELECT p.kode_paket, p.tahapan, d.tahap, d.diambil_pada, d.error, d.lengkap, d.satker FROM spse_paket p "
+ALASAN_DETAIL_SPSE = {"belum": "belum pernah diambil", "gagal": "gagal diambil sebelumnya", "belum_rinci": "belum dirinci (pemenang/kontrak/jadwal)",
+                      "tahapan": "tahapan di daftar berubah sejak diambil", "usang": "sudah melewati batas umur", "paksa": "dipaksa ambil ulang"}
+
+
+def status_detail_spse(conn, lpse, jenis, tahun, usia_hari=7, semua=False, aktif_saja=True, satker=None):
+    """[(kode_paket, alasan|None)] untuk SEMUA paket tahun itu; alasan None = detail sudah lengkap, tidak perlu diambil.
+    Aturan: belum pernah diambil / gagal -> ambil. Bila `satker` diberikan, paket instansi lain cukup diambil SEKALI (pengumuman),
+    paket instansi itu harus dirinci lengkap. Detail yang sudah lengkap hanya diambil ulang bila tahapan di DAFTAR berubah atau
+    melewati `usia_hari` (0 = abaikan umur), atau bila `semua` (paksa)."""
+    sql = ("SELECT p.kode_paket, p.tahapan, d.tahapan_daftar, d.diambil_pada, d.error, d.lengkap, d.satker FROM spse_paket p "
            "LEFT JOIN spse_detail d ON d.lpse=p.lpse AND d.jenis=p.jenis AND d.kode_paket=p.kode_paket "
            "WHERE p.lpse=? AND p.jenis=? AND p.tahun=?" + (" AND p.is_active=1" if aktif_saja else "") + " ORDER BY p.kode_paket")
     batas = (datetime.now() - timedelta(days=usia_hari)).strftime("%Y-%m-%dT%H:%M:%S") if usia_hari else None
     sasaran = norm_satker(satker) if satker else None
     hasil = []
-    for kode, tahapan, tahap, diambil, err, lengkap, sat in conn.execute(sql, (lpse, jenis, tahun)):
-        if semua or diambil is None or err:
-            hasil.append(kode)
+    for kode, tahapan, tahapan_lama, diambil, err, lengkap, sat in conn.execute(sql, (lpse, jenis, tahun)):
+        if semua:
+            alasan = "paksa"
+        elif diambil is None:
+            alasan = "belum"
+        elif err:
+            alasan = "gagal"
         elif sasaran is not None and norm_satker(sat) != sasaran:
-            continue                                                      # instansi lain: cukup sekali
-        elif not lengkap or (tahap or "") != (tahapan or "") or (batas and diambil < batas):
-            hasil.append(kode)
+            alasan = None                                               # instansi lain: cukup sekali
+        elif not lengkap:
+            alasan = "belum_rinci"
+        elif tahapan_lama is not None and tahapan_lama != (tahapan or ""):
+            alasan = "tahapan"
+        elif batas and diambil < batas:
+            alasan = "usang"
+        else:
+            alasan = None
+        hasil.append((kode, alasan))
     return hasil
+
+
+def paket_perlu_detail_spse(conn, lpse, jenis, tahun, usia_hari=7, semua=False, aktif_saja=True, satker=None):
+    """Kode paket yang perlu diambil (urut menurut kode paket); lihat status_detail_spse untuk aturannya."""
+    return [k for k, a in status_detail_spse(conn, lpse, jenis, tahun, usia_hari, semua, aktif_saja, satker) if a]
+
+
+def simpan_rup_luar_daftar(conn, kode, d=None, ditemukan=None, error=None, link=None):
+    """d = hasil sirup_detail.ambil_detail (ditemukan=1) | None dengan ditemukan=0 (tidak ada di SiRUP) | error saja (belum pasti)."""
+    waktu = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with conn:
+        if d is not None:
+            e = d.get("extra") or {}
+            conn.execute("INSERT OR REPLACE INTO sirup_luar_daftar(kode_rup,ditemukan,nama_paket,satker_nama,klpd_nama,tahun_anggaran,pagu,metode_pemilihan,"
+                         "jenis_pengadaan,mak,tanggal_umumkan,link,diambil_pada,error) VALUES(?,1,?,?,?,?,?,?,?,?,?,?,?,NULL)",
+                         (kode, d["nama_paket"], d["satuan_kerja"], d["klpd"], d["tahun_anggaran"], d["total_pagu"], e.get("metode_pemilihan"),
+                          e.get("jenis_pengadaan"), d.get("mak"), e.get("tanggal_umumkan"), link, waktu))
+        else:
+            conn.execute("INSERT OR REPLACE INTO sirup_luar_daftar(kode_rup,ditemukan,link,diambil_pada,error) VALUES(?,?,?,?,?)",
+                         (kode, ditemukan, link, waktu, error))

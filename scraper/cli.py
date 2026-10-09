@@ -51,14 +51,24 @@ def cmd_spse_detail(args):
     lpse = args.lpse or (target.get("spse") or {}).get("lpse", "pontianak")
     conn = db.buka(args.db)
     try:
-        satker = None if args.semua_satker else target["satker_nama"]
+        # cakupan rincian lengkap: --satker NAMA | semua | tidak (hanya Pengumuman); bawaan = satker di config (bisa diganti)
+        pilih = args.satker if args.satker is not None else ("semua" if args.semua_satker else target["satker_nama"])
+        satker = None if pilih.lower() == "semua" else "__tidak" if pilih.lower() == "tidak" else pilih
         return tugas.run_spse_detail(conn, args.jenis, lpse, int(args.tahun or target["tahun"]), jeda=args.jeda,
-                                     usia_hari=args.usia_hari, semua=args.semua, limit=args.limit, satker=satker)
+                                     usia_hari=args.usia_hari, semua=args.semua, limit=args.limit, satker=satker, koneksi=args.koneksi)
     except KeyboardInterrupt:
         print("\nDihentikan.")
         return 130
     except ValueError as e:
         raise SystemExit(f"Parameter tidak valid: {e}")
+
+
+def cmd_ekspor_publik(args):
+    from . import ekspor_publik
+    ringkas = ekspor_publik.ekspor(args.db, args.keluar, dengan_excel=not args.tanpa_excel)
+    print(f"Selesai: {ringkas['berkas']} berkas data, total {ringkas['ukuran_mb']} MB di {args.keluar}")
+    print(f"Coba lokal:  cd {args.keluar} && python3 -m http.server 8000   lalu buka http://localhost:8000/")
+    return 0
 
 
 def cmd_ambil(args):
@@ -155,12 +165,18 @@ def main(argv=None):
     sd.add_argument("--target")
     sd.add_argument("--lpse", help="kode LPSE (default: dari config)")
     sd.add_argument("--tahun", default=None, help="tahun anggaran (default: tahun di config)")
-    sd.add_argument("--jeda", type=float, default=1.5, help="jeda antar permintaan, detik (default 1.5)")
+    sd.add_argument("--koneksi", type=int, default=1, help="jumlah koneksi paralel (1-10; default 1)")
+    sd.add_argument("--jeda", type=float, default=1.5, help="jeda tiap koneksi antar permintaan, detik (default 1.5)")
     sd.add_argument("--limit", type=int, help="ambil hanya N paket (uji coba)")
     sd.add_argument("--usia-hari", type=int, default=7, help="ambil ulang detail yang lebih tua dari N hari (0 = nonaktif)")
     sd.add_argument("--semua", action="store_true", help="paksa ambil ulang semua")
-    sd.add_argument("--semua-satker", action="store_true", help="rincian lengkap (pemenang, kontrak, jadwal) untuk SEMUA instansi, bukan hanya satker target")
+    sd.add_argument("--satker", help="rincian lengkap (pemenang, kontrak, jadwal) hanya untuk satker ini; 'semua' = semua satker, 'tidak' = hanya Pengumuman (default: satker di config)")
+    sd.add_argument("--semua-satker", action="store_true", help="sama dengan --satker semua")
     sd.set_defaults(fn=cmd_spse_detail)
+    ep = sub.add_parser("ekspor-publik", help="buat salinan publik (hanya baca) dashboard: situs statis HTML + JSON yang bisa di-hosting")
+    ep.add_argument("--keluar", default=str(ROOT / "publik"), help="folder hasil (default: publik/)")
+    ep.add_argument("--tanpa-excel", action="store_true", help="lewati pembuatan berkas Excel (lebih cepat dan kecil)")
+    ep.set_defaults(fn=cmd_ekspor_publik)
     a = sub.add_parser("ambil", help="SATU PROSES: ambil daftar RUP, lalu detail paket, lalu bangun database Jalan/Gang")
     a.add_argument("sumber", choices=["sirup"])
     a.add_argument("--target")

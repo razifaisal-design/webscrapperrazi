@@ -62,3 +62,17 @@ Sumber: `https://spse.inaproc.id/pontianak/nontender`. Yang sudah dikerjakan: **
 - Halaman: Pengumuman (`/nontender/{kode}/pengumumanpl`, tanpa bagian Syarat Kualifikasi), Pemenang (`/evaluasinontender/{kode}/pemenang`, semua kolom), Pemenang Berkontrak (`.../pemenangberkontrak`, hanya untuk cek `nilai_kontrak` terisi = PPK sudah mengisi e-kontrak).
 - Satker hanya ada di detail: 7 dari 10 paket pertama ternyata bukan milik Dinas Perkim → pemfilteran satker harus menunggu detail (atau ambil detail semua 1.155 paket ≈ 1,5 jam pada jeda 1,5 dtk).
 - Belum dikerjakan: tombol/tab detail di dashboard; penautan kode RUP SPSE ↔ SiRUP (kode RUP sudah tersimpan di `spse_detail.kode_rup`); melewati halaman Pemenang untuk paket dibatalkan (hemat permintaan).
+
+## Halaman SPSE & Perbandingan (8 Oktober 2026)
+- Halaman terpisah: `/` (SiRUP), `/spse` (SPSE), `/banding` (Perbandingan SiRUP ↔ SPSE), `/grafik`. CSS bersama di `scraper/gaya.css`, JS bersama (tugas/progres) di `scraper/bersama.js`.
+- Proses SPSE satu tombol "Ambil Data + Detail": tahap 1 daftar (100/halaman), tahap 2 detail. Pengumuman diambil untuk SEMUA paket (butuh instansi + kode RUP); Pemenang, Pemenang Berkontrak, Jadwal + riwayat perubahan hanya untuk paket satker target (opsi "semua instansi" tersedia).
+- "Sudah tayang" = tahap *Upload Dokumen Penawaran* (tahap pertama jadwal) sudah mulai dibanding waktu sekarang (asumsi; ubah di `banding.TAHAP_TAYANG`).
+- Pencocokan RUP ↔ paket SPSE: (1) kode RUP, (2) RUP lama → RUP pengganti (revisi), (3) nama paket + instansi sama bila RUP berubah setelah tayang.
+- Belum dikerjakan: Tender/Seleksi (status "Tender/Seleksi (belum diambil)"), alias nama satker untuk tahun lama (config `spse.satker_alias`), pencocokan paket SPSE yang menggabungkan RUP lintas tahun.
+
+## Satker dikenali lewat NAMA (9 Oktober 2026)
+- Aplikasi tidak lagi terkunci pada satu dinas. Halaman SPSE dan Perbandingan punya filter utama **Satker / Dinas**; halaman SiRUP punya kotak Satker / Dinas + panel "Tambah satker / dinas" (tulis nama, bukan ID).
+- Direktori SiRUP (publik): kategori (`datatablerupkldi2?jenisID=KOTA`) → K/L/PD (mis. Kota Pontianak = `D199`) → satker + idSatker per tahun (`datatableruprekapkldi?idKldi=D199&tahun=`). idSatker ditemukan otomatis menurut nama untuk tiap tahun (`tentukan_id_satker`), dan dicatat di config.
+- Satker baru memakai **rekap umum** (per MAK, per uraian, database paket, perubahan). Aturan Jalan/Saluran/MAK Perbaikan/pemeriksaan wilayah khusus Perkim tidak diterapkan; tab itu otomatis tersembunyi. Aturan khusus bisa ditambahkan per satker di `config/targets.json`.
+- Satker kembar nama dalam satu tahun (mis. DINAS KESEHATAN 2021: dua idSatker) → dipakai yang paketnya terbanyak; satker lainnya dicatat di log.
+- Belum dikerjakan: rekap gabungan beberapa satker sekaligus ("Semua satker") di halaman SiRUP; filter satker di halaman Grafik hanya mengikuti satker yang dipilih.

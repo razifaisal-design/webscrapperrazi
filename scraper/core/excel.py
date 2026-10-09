@@ -3,6 +3,7 @@ import io
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.utils import get_column_letter
 
 # (judul kolom, lebar)
@@ -13,6 +14,11 @@ KOLOM_TAHUN = ("TAHUN", 8)
 _WARNA = {"Salah MAK": "F8D7D3", "MAK belum dipetakan": "FDF1C7", "Sesuai": "DDF1E4"}
 _HEADER = PatternFill("solid", fgColor="1F3A5F")
 _MERAH, _KUNING = PatternFill("solid", fgColor="F8D7D3"), PatternFill("solid", fgColor="FDF1C7")
+
+
+def _bersih(v):
+    """Karakter kontrol di teks sumber (mis. \\x0b) membuat openpyxl menolak sel; buang saja."""
+    return ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v
 
 
 def _gang(r):
@@ -66,7 +72,7 @@ def _isi_sheet(ws, rows, dengan_tahun):
     pagu_kol = len(KOLOM)
     for n, r in enumerate(rows, 1):
         isi, pemeriksaan, tingkat = _baris(r, n, dengan_tahun)
-        ws.append(isi)
+        ws.append([_bersih(x) for x in isi])
         baris = ws.max_row
         rup = ws.cell(row=baris, column=2)
         if r.get("link"):
@@ -120,7 +126,7 @@ def buat_xlsx_tabel(sheets, tautan=None):
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         ws.row_dimensions[1].height = 30
         for r in rows:
-            ws.append(list(r))
+            ws.append([_bersih(x) for x in r])
             for c in ws[ws.max_row]:
                 if isinstance(c.value, (int, float)) and not isinstance(c.value, bool) and abs(c.value) >= 1000:
                     c.number_format = "#,##0"

@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import tugas as _tugas
-from .konfig import TARGETS, muat_target
+from .konfig import TARGETS, daftar_target, muat_target, satker_sirup
 from .core import banding, database, db, excel, lokasi, rekap, semua_tahun, statistik
 from .core.klasifikasi import AturanError
 
@@ -79,22 +79,25 @@ class PengelolaTugas:
             self._s.update(tahap_ke=ke, tahap_total=total, tahap_nama=nama, selesai=0, total=0, ok=0, gagal=0,
                            laju=None, sisa_detik=None)
 
-    def mulai(self, jenis, tahun, koneksi, jeda, usia_hari=7, semua=False, id_satker=None, semua_satker=False):
-        if jenis not in ("semua", "daftar", "detail", "spse_nontender", "spse_semua"):
-            raise ValueError("jenis harus 'semua', 'daftar', 'detail', 'spse_nontender' atau 'spse_semua'")
-        spse_ = jenis.startswith("spse_")
+    def mulai(self, jenis, tahun, koneksi, jeda, usia_hari=7, semua=False, id_satker=None, satker=None, target=None):
+        if jenis not in ("semua", "daftar", "detail", "spse_nontender", "spse_semua", "banding_periksa"):
+            raise ValueError("jenis tugas tidak dikenal")
+        spse_ = jenis.startswith("spse_") or jenis == "banding_periksa"          # boleh tahun 'semua'; tidak memakai idSatker SiRUP
         if spse_ and str(tahun) == "semua":                  # SPSE: 'semua' = semua tahun di pilihan SPSE
-            koneksi, jeda, usia_hari = 1, float(jeda), int(usia_hari)
+            koneksi, jeda, usia_hari = int(koneksi), float(jeda), int(usia_hari)
         else:
             koneksi, jeda, usia_hari, tahun = int(koneksi), float(jeda), int(usia_hari), int(tahun)
             if not 2000 <= tahun <= 2100 or not 0 <= usia_hari <= 3650:
                 raise ValueError("tahun atau batas umur di luar jangkauan")
-        if spse_:
-            koneksi = 1                                       # SPSE selalu 1 koneksi
+        if spse_ and jenis == "spse_nontender":
+            koneksi = 1                                       # hanya daftar paket: selalu 1 koneksi
+        target = target or None
+        if target is not None and target not in [t["nama"] for t in daftar_target()]:
+            raise ValueError("satker tidak dikenal; tambahkan dulu lewat nama")
         id_satker = int(id_satker) if id_satker not in (None, "") else None
         if id_satker is not None and not 1 <= id_satker <= 10**9:
             raise ValueError("idSatker di luar jangkauan")
-        _tugas.cek_param(1 if jenis == "daftar" or spse_ else koneksi, jeda)
+        _tugas.cek_param(1 if jenis in ("daftar", "spse_nontender") else koneksi, jeda)
         with self._kunci:
             if self._s["status"] == "berjalan":
                 raise RuntimeError("Masih ada tugas yang berjalan.")
@@ -102,30 +105,37 @@ class PengelolaTugas:
             self._sampel.clear()
             self._tahap_mulai = self._mulai_mono = time.monotonic()
             self._s.update(laju=None, sisa_detik=None, berlalu_detik=0, berakhir=None, lama_detik=None,
-                           status="berjalan", jenis=jenis, tahun=tahun, koneksi=1 if jenis == "daftar" or spse_ else koneksi,
+                           status="berjalan", jenis=jenis, tahun=tahun, target=target, koneksi=1 if jenis in ("daftar", "spse_nontender") else koneksi,
                            tahap_ke=0, tahap_total=0, tahap_nama=None,
                            jeda=jeda, mulai=time.strftime("%Y-%m-%dT%H:%M:%S"), selesai=0, total=0, ok=0, gagal=0,
-                           log=[], kode=None, peringatan=_tugas.peringatan_laju(1 if jenis == "daftar" or spse_ else koneksi, jeda))
-        self._thread = threading.Thread(target=self._jalan, args=(jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker, bool(semua_satker)), daemon=True)
+                           log=[], kode=None, peringatan=_tugas.peringatan_laju(1 if jenis in ("daftar", "spse_nontender") else koneksi, jeda))
+        self._thread = threading.Thread(target=self._jalan, args=(jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker, satker, target), daemon=True)
         self._thread.start()
 
-    def _jalan(self, jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker=None, semua_satker=False):
+    def _jalan(self, jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker=None, satker=None, target=None):
         kode = 1
         conn = None
         try:
             conn = db.buka(self.db_path)
+            if jenis == "banding_periksa":
+                self._tahap(1, 1, "Periksa RUP ke SiRUP")
+                kodes = _tugas.kode_rup_tak_berpasangan(conn, None if tahun == "semua" else [int(tahun)], None if satker in (None, "", "__semua") else satker)
+                kode = _tugas.run_periksa_rup(conn, kodes, koneksi=koneksi, jeda=jeda, ulang=semua, log=self._log, berhenti=self._henti, progres=self._progres)
+                return
             if jenis.startswith("spse_"):
                 _, dasar = muat_target(None, None)
                 lpse = (dasar.get("spse") or {}).get("lpse", "pontianak")
+                # cakupan rincian lengkap: nama satker | '__tidak' (hanya Pengumuman) | kosong/'__semua' (semua satker)
+                cakupan = None if satker in (None, "", "__semua") else str(satker)
                 if jenis == "spse_semua":
                     kode = _tugas.run_spse_semua(conn, "nontender", lpse, tahun, jeda=jeda, usia_hari=usia_hari, semua=semua,
-                                                 satker=None if semua_satker else dasar["satker_nama"], log=self._log,
+                                                 satker=cakupan, koneksi=koneksi, log=self._log,
                                                  progres=self._progres, tahap=self._tahap, berhenti=self._henti)
                 else:
                     self._tahap(1, 1, "Daftar paket SPSE")
                     kode = _tugas.run_spse(conn, jenis.split("_", 1)[1], lpse, tahun, jeda=jeda, log=self._log, berhenti=self._henti)
                 return
-            _, target = muat_target(None, tahun, id_satker)
+            _, target = muat_target(target, tahun, id_satker)
             if jenis == "semua":
                 kode = _tugas.run_semua(conn, target, koneksi=koneksi, jeda=jeda, usia_hari=usia_hari, semua=semua,
                                         log=self._log, progres=self._progres, tahap=self._tahap, berhenti=self._henti,
@@ -170,10 +180,11 @@ def parse_tahun(q, tahun_default):
     return int(th) if th and th.isdigit() else tahun_default
 
 
-def semua_dari_db(conn, tahun_default):
-    """[(target, data)] untuk setiap tahun di database; tiap tahun memakai aturannya sendiri (config per_tahun)."""
-    _, dasar = muat_target(None, tahun_default)
-    return semua_tahun.hitung_per_tahun(conn, lambda y: muat_target(None, y)[1], dasar["id_satker_semua"])
+def semua_dari_db(conn, tahun_default, nama=None):
+    """[(target, data)] untuk setiap tahun di database; tiap tahun memakai aturannya sendiri (config per_tahun).
+    `nama` = kunci target (satker) di config; kosong = target bawaan."""
+    _, dasar = muat_target(nama, tahun_default)
+    return semua_tahun.hitung_per_tahun(conn, lambda y: muat_target(nama, y)[1], dasar["id_satker_semua"])
 
 
 def versi_db(conn, tahun_default):
@@ -184,13 +195,13 @@ def versi_db(conn, tahun_default):
     e = tuple(conn.execute("SELECT COUNT(*), MAX(last_seen), SUM(is_active) FROM spse_paket").fetchone())
     e += tuple(conn.execute("SELECT COUNT(*), MAX(diambil_pada), SUM(lengkap), SUM(error IS NOT NULL) FROM spse_detail").fetchone())
     e += tuple(conn.execute("SELECT COUNT(*), MAX(diambil_pada) FROM spse_jadwal").fetchone())
+    e += tuple(conn.execute("SELECT COUNT(*), MAX(diambil_pada), SUM(ditemukan) FROM sirup_luar_daftar").fetchone())
     return f"{a}|{b}|{c}|{e}|{TARGETS.stat().st_mtime}|{tahun_default}"
 
 
 def _konfig_spse():
     _, dasar = muat_target(None, None)
-    spse_cfg = dasar.get("spse") or {}
-    return dasar, spse_cfg.get("lpse", "pontianak"), [dasar["satker_nama"], *spse_cfg.get("satker_alias", [])]
+    return dasar, (dasar.get("spse") or {}).get("lpse", "pontianak")
 
 
 _SQL_SPSE = ("SELECT p.tahun, p.kode_paket, p.nama_paket, p.tahapan, p.metode, p.kategori, p.hps_teks, p.nilai_kontrak_teks, p.link, p.is_active, "
@@ -206,59 +217,95 @@ _SQL_SPSE = ("SELECT p.tahun, p.kode_paket, p.nama_paket, p.tahapan, p.metode, p
              "WHERE p.lpse=? AND p.jenis='nontender'")
 
 
-def data_spse(conn, th, bawaan):
-    """Daftar paket SPSE + detail (satu tahun, atau 'semua'), tanda milik satker target, dan ringkasan kemajuan pengambilan."""
-    dasar, lpse, nama_satker = _konfig_spse()
-    sasaran = {db.norm_satker(x) for x in nama_satker}
+def data_satker(conn):
+    """Satker yang sudah terdaftar di config beserta jumlah paket dan tahun yang sudah ada di database (tanpa ID untuk pengguna)."""
+    hasil = []
+    for t in daftar_target():
+        ids = t["id_satker_semua"]
+        mark = ",".join("?" * len(ids))
+        baris = conn.execute(f"SELECT tahun, COUNT(*) FROM sirup_paket WHERE id_satker IN ({mark}) AND is_active=1 GROUP BY tahun ORDER BY tahun", ids).fetchall()
+        hasil.append({"target": t["nama"], "satker": t["satker_nama"], "klpd": t["klpd_nama"], "bawaan": t["bawaan"],
+                      "paket": sum(n for _, n in baris), "tahun": [y for y, _ in baris]})
+    return {"satker": hasil}
+
+
+def _param_satker(q):
+    """Filter satker dari query: kosong / 'semua' = semua satker."""
+    v = (q.get("satker", [""])[0] or "").strip()
+    return None if v in ("", "semua") else v
+
+
+def data_spse(conn, th, bawaan, satker=None, rinci=None):
+    """Daftar paket SPSE + detail (satu tahun, atau 'semua'), difilter satker, plus ringkasan kemajuan pengambilan.
+    `rinci` = cakupan rincian lengkap yang akan diambil: nama satker, '__semua', atau '__tidak' (bawaan: mengikuti filter satker)."""
+    dasar, lpse = _konfig_spse()
     tahun_ada = sorted({r[0] for r in conn.execute("SELECT DISTINCT tahun FROM spse_paket WHERE lpse=? AND jenis='nontender'", (lpse,))}, reverse=True)
     yang = dasar["tahun"] if bawaan else th
     sql, par = _SQL_SPSE, [lpse]
     if yang != "semua":
         sql += " AND p.tahun=?"
         par.append(int(yang))
-    baris = []
-    for r in conn.execute(sql + " ORDER BY p.tahun DESC, p.kode_paket DESC", par):
-        d = dict(r)
-        d["milik"] = int(bool(d["ada_detail"]) and db.norm_satker(d["satker"]) in sasaran)
-        baris.append(d)
+    semua_baris = [dict(r) for r in conn.execute(sql + " ORDER BY p.tahun DESC, p.kode_paket DESC", par)]
+    sk = db.norm_satker(satker) if satker else None
+    # daftar satker (tidak terfilter) untuk pilihan filter utama
+    daftar = {}
+    for b in semua_baris:
+        if b["is_active"] and b["ada_detail"]:
+            e = daftar.setdefault(db.norm_satker(b["satker"]), {"nama": b["satker"], "paket": 0, "lengkap": 0})
+            e["paket"] += 1
+            e["lengkap"] += 1 if b["lengkap"] else 0
+    baris = [b for b in semua_baris if sk is None or (b["ada_detail"] and db.norm_satker(b["satker"]) == sk)]
     aktif = [b for b in baris if b["is_active"]]
-    milik = [b for b in aktif if b["milik"]]
-    perlu_lain = perlu_milik = 0
-    peta = {(b["tahun"], b["kode_paket"]): b for b in aktif}
-    for t in (tahun_ada if yang == "semua" else [int(yang)]):
-        for kode in db.paket_perlu_detail_spse(conn, lpse, "nontender", t, 7, False, satker=dasar["satker_nama"]):
-            if peta.get((t, kode), {}).get("milik"):
-                perlu_milik += 1                                # rincian lengkap: ±5 permintaan
+    lengkap = [b for b in aktif if b["lengkap"]]
+    cakupan = (satker if satker else "__semua") if rinci in (None, "") else rinci
+    scope = None if cakupan == "__semua" else cakupan                     # None = semua dirinci; '__tidak' tidak cocok satker mana pun
+    peta = {(b["tahun"], b["kode_paket"]): b for b in semua_baris if b["is_active"]}
+    perlu_lain = perlu_rinci = 0
+    alasan = {}
+    for t in (tahun_ada if yang == "semua" else ([int(yang)] if int(yang) in tahun_ada else [])):
+        for kode, a in db.status_detail_spse(conn, lpse, "nontender", t, 7, False, satker=scope):
+            if not a:
+                continue
+            b = peta.get((t, kode))
+            if sk is not None and not (b and b["ada_detail"] and db.norm_satker(b["satker"]) == sk):
+                continue                                                  # di luar satker yang sedang dilihat
+            alasan[a] = alasan.get(a, 0) + 1
+            if b and b["ada_detail"]:
+                perlu_rinci += 1                                          # rincian lengkap: ±5 permintaan
             else:
-                perlu_lain += 1                                 # baru pengumuman: 1 permintaan (bila ternyata milik satker: +4)
+                perlu_lain += 1                                           # baru Pengumuman: 1 permintaan
     return {"lpse": lpse, "jenis": "nontender", "tahun": tahun_ada, "tahun_bawaan": dasar["tahun"], "tahun_dipilih": yang,
-            "satker_target": dasar["satker_nama"], "baris": baris,
-            "ringkas": {"paket_aktif": len(aktif), "dengan_detail": sum(1 for b in aktif if b["ada_detail"]), "milik": len(milik),
-                        "milik_lengkap": sum(1 for b in milik if b["lengkap"]), "pagu": sum(b["pagu"] or 0 for b in milik),
-                        "hps": sum(b["hps"] or 0 for b in milik), "kontrak_terisi": sum(1 for b in milik if b["kontrak_terisi"]),
-                        "pemenang_terisi": sum(1 for b in milik if b["pemenang_terisi"]), "jadwal_diubah": sum(1 for b in milik if b["jadwal_diubah"]),
-                        "perlu_milik": perlu_milik, "perlu_lain": perlu_lain,
-                        "terakhir_detail": (conn.execute("SELECT MAX(diambil_pada) FROM spse_detail WHERE lpse=? AND error IS NULL", (lpse,)).fetchone()[0])}}
+            "satker": satker, "satker_daftar": sorted(daftar.values(), key=lambda e: e["nama"]),
+            "satker_belum_dicek": sum(1 for b in semua_baris if b["is_active"] and not b["ada_detail"]),
+            "satker_sirup": sorted(satker_sirup()), "rinci": cakupan, "baris": baris,
+            "ringkas": {"paket_aktif": len(aktif), "dengan_detail": sum(1 for b in aktif if b["ada_detail"]), "terinci": len(lengkap),
+                        "pagu": sum(b["pagu"] or 0 for b in lengkap), "hps": sum(b["hps"] or 0 for b in lengkap),
+                        "harga_penawaran": sum(b["harga_penawaran"] or 0 for b in lengkap),
+                        "hasil_negosiasi": sum(b["hasil_negosiasi"] or 0 for b in lengkap), "nilai_kontrak": sum(b["nilai_kontrak"] or 0 for b in lengkap),
+                        "kontrak_terisi": sum(1 for b in lengkap if b["kontrak_terisi"]), "pemenang_terisi": sum(1 for b in lengkap if b["pemenang_terisi"]),
+                        "jadwal_diubah": sum(1 for b in lengkap if b["jadwal_diubah"]), "perlu_rinci": perlu_rinci, "perlu_lain": perlu_lain,
+                        "alasan": {db.ALASAN_DETAIL_SPSE[k]: n for k, n in alasan.items()},
+                        "terakhir_detail": conn.execute("SELECT MAX(diambil_pada) FROM spse_detail WHERE lpse=? AND error IS NULL", (lpse,)).fetchone()[0]}}
 
 
-def data_banding(conn, th, bawaan):
-    dasar, lpse, nama_satker = _konfig_spse()
+def data_banding(conn, th, bawaan, satker=None):
+    dasar, lpse = _konfig_spse()
     tahun_spse = sorted({r[0] for r in conn.execute("SELECT DISTINCT tahun FROM spse_paket WHERE lpse=? AND jenis='nontender'", (lpse,))})
     yang = dasar["tahun"] if bawaan else th
     tahun_list = tahun_spse if yang == "semua" else [int(yang)]
-    h = banding.hitung(conn, lpse, "nontender", tahun_list, dasar["id_satker_semua"], nama_satker[0], nama_satker[1:])
-    h.update(tahun=tahun_spse, tahun_bawaan=dasar["tahun"], tahun_dipilih=yang, satker_target=dasar["satker_nama"], lpse=lpse)
+    h = banding.hitung(conn, lpse, "nontender", tahun_list, satker_sirup(), satker)
+    h.update(tahun=tahun_spse, tahun_bawaan=dasar["tahun"], tahun_dipilih=yang, satker=satker, lpse=lpse)
     return h
 
 
-KOLOM_EXCEL_SPSE = [("NO", 6), ("TAHUN", 7), ("KODE NON TENDER", 16), ("KODE RUP (SPSE)", 16), ("NAMA PAKET", 60), ("SATKER", 34), ("TAHAPAN", 22),
+KOLOM_EXCEL_SPSE = [("NO", 6), ("TAHUN", 7), ("KODE NON TENDER", 16), ("KODE RUP (SPSE)", 16), ("NAMA PAKET", 60), ("SATKER / DINAS", 38), ("TAHAPAN", 22),
                     ("METODE", 18), ("JENIS PENGADAAN", 24), ("SUMBER DANA", 11), ("TAHUN ANGGARAN", 10), ("PAGU", 17), ("HPS", 17),
                     ("PEMENANG", 34), ("HARGA PENAWARAN", 17), ("HARGA TERKOREKSI", 17), ("HASIL NEGOSIASI", 17),
                     ("PEMENANG TERISI", 10), ("NILAI KONTRAK", 17), ("KONTRAK TERISI (PPK)", 12),
                     ("UPLOAD MULAI", 17), ("UPLOAD SAMPAI", 17), ("PERUBAHAN JADWAL", 10)]
-KOLOM_EXCEL_BANDING = [("NO", 6), ("TAHUN", 7), ("KODE RUP", 12), ("KODE NON TENDER", 16), ("KODE RUP DI SPSE", 16), ("NAMA PAKET SIRUP", 54),
-                       ("NAMA PAKET SPSE", 54), ("METODE SIRUP", 18), ("STATUS", 28), ("KECOCOKAN", 30), ("TAHAPAN SPSE", 22),
-                       ("UPLOAD MULAI", 17), ("UPLOAD SAMPAI", 17), ("UPLOAD MULAI AWAL", 17), ("PERUBAHAN JADWAL", 10),
+KOLOM_EXCEL_BANDING = [("NO", 6), ("TAHUN", 7), ("SATKER / DINAS", 38), ("KODE RUP", 12), ("KODE NON TENDER", 16), ("KODE RUP DI SPSE", 16), ("NAMA PAKET SIRUP", 54),
+                       ("NAMA PAKET SPSE", 54), ("METODE SIRUP", 18), ("STATUS", 28), ("KECOCOKAN", 40), ("DI DAFTAR SIRUP", 12), ("TAHAPAN SPSE", 22),
+                       ("UPLOAD MULAI", 17), ("UPLOAD SAMPAI", 17), ("UPLOAD MULAI AWAL", 17), ("UPLOAD SAMPAI AWAL", 17), ("PERUBAHAN JADWAL", 10),
                        ("PAGU SIRUP", 17), ("PAGU SPSE", 17), ("PAGU SAMA", 10), ("SELISIH PAGU", 15), ("HPS", 17), ("HARGA PENAWARAN", 17),
                        ("HARGA TERKOREKSI", 17), ("HASIL NEGOSIASI", 17), ("NILAI KONTRAK", 17), ("PEMENANG", 34)]
 
@@ -269,7 +316,7 @@ def _waktu(iso):
 
 def baris_excel_spse(data):
     isi = []
-    for n, b in enumerate([x for x in data["baris"] if x["milik"] and x["is_active"]], 1):
+    for n, b in enumerate([x for x in data["baris"] if x["lengkap"] and x["is_active"]], 1):
         isi.append([n, b["tahun"], b["kode_paket"], b["kode_rup"], b["nama_paket"], b["satker"], b["tahapan"], b["metode"], b["jenis_pengadaan"],
                     b["sumber_dana"], b["tahun_anggaran"], b["pagu"], b["hps"], b["pemenang_nama"], b["harga_penawaran"], b["harga_terkoreksi"],
                     b["hasil_negosiasi"], "Ya" if b["pemenang_terisi"] else "Belum", b["nilai_kontrak"], "Ya" if b["kontrak_terisi"] else "Belum",
@@ -280,9 +327,9 @@ def baris_excel_spse(data):
 def baris_excel_banding(data):
     isi = []
     for n, b in enumerate(data["baris"], 1):
-        isi.append([n, b["tahun"], b.get("kode_rup"), b.get("kode_nontender"), b.get("kode_rup_spse"), b.get("nama_sirup"), b.get("nama_spse"),
-                    b.get("metode_sirup"), b["status"], b.get("kecocokan"), b.get("tahapan"), _waktu(b.get("upload_mulai")), _waktu(b.get("upload_sampai")),
-                    _waktu(b.get("upload_mulai_awal")), b.get("jadwal_diubah"), b.get("pagu_sirup"), b.get("pagu_spse"),
+        isi.append([n, b["tahun"], b.get("satker"), b.get("kode_rup"), b.get("kode_nontender"), b.get("kode_rup_spse"), b.get("nama_sirup"), b.get("nama_spse"),
+                    b.get("metode_sirup"), b["status"], b.get("kecocokan"), (None if not b.get("kode_rup") else "Tidak (dicek via kode RUP)" if b.get("di_daftar") is False else "Ya"), b.get("tahapan"), _waktu(b.get("upload_mulai")), _waktu(b.get("upload_sampai")),
+                    _waktu(b.get("upload_mulai_awal")), _waktu(b.get("upload_sampai_awal")), b.get("jadwal_diubah"), b.get("pagu_sirup"), b.get("pagu_spse"),
                     None if b.get("pagu_sama") is None else ("Sama" if b["pagu_sama"] else "BEDA"), b.get("selisih_pagu"), b.get("hps"),
                     b.get("harga_penawaran"), b.get("harga_terkoreksi"), b.get("hasil_negosiasi"), b.get("nilai_kontrak"), b.get("pemenang")])
     return isi
@@ -293,10 +340,10 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
     cache = {}
     sidik_awal = sidik_kode()
 
-    def hitung_jalan(conn):
-        _, dasar = muat_target(None, tahun_default)
+    def hitung_jalan(conn, nama=None):
+        _, dasar = muat_target(nama, tahun_default)
         per_tahun, info = {}, []
-        for t, d in semua_dari_db(conn, tahun_default):
+        for t, d in semua_dari_db(conn, tahun_default, nama):
             per_tahun[t["tahun"]] = d["lokasi"]
             aktif, ada = d["paket_aktif"], d["paket_dengan_detail"]
             # 'lengkap' = detail hampir semua paket sudah diambil; tahun sebagian tidak boleh dipakai membandingkan
@@ -334,12 +381,21 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             if u.path == "/api/tugas/mulai":
                 try:
                     tugas.mulai(body.get("jenis"), body.get("tahun"), body.get("koneksi", 1), body.get("jeda", 1.5),
-                                body.get("usia_hari", 7), bool(body.get("semua")), body.get("id_satker"), bool(body.get("semua_satker")))
+                                body.get("usia_hari", 7), bool(body.get("semua")), body.get("id_satker"), body.get("satker"), body.get("target"))
                 except RuntimeError as e:
                     return self._json(409, {"error": str(e)})
                 except (ValueError, TypeError) as e:
                     return self._json(400, {"error": f"Parameter tidak valid: {e}"})
                 return self._json(200, tugas.status())
+            if u.path == "/api/satker/tambah":
+                try:
+                    kunci, resmi = _tugas.tambah_satker_nama(str(body.get("nama", "")).strip(), body.get("klpd") or None)
+                except ValueError as e:
+                    return self._json(400, {"error": str(e)})
+                except Exception as e:                       # jaringan / respons SiRUP tak terduga
+                    return self._json(502, {"error": f"Gagal membaca direktori SiRUP: {e!r}"})
+                cache.clear()
+                return self._json(200, {"target": kunci, "satker_nama": resmi})
             if u.path == "/api/tugas/henti":
                 tugas.henti()
                 return self._json(200, tugas.status())
@@ -375,12 +431,13 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             """Unduh database ke Excel: semua tahun (satu sheet gabungan + satu sheet per tahun) atau satu tahun terpilih."""
             try:
                 tidak_aktif = q.get("tidak_aktif", ["0"])[0] == "1"
+                nama_target = q.get("target", [None])[0] or None
                 conn = buka_readonly(db_path)
                 try:
                     if th == "semua":
-                        pasangan = semua_dari_db(conn, tahun_default)
+                        pasangan = semua_dari_db(conn, tahun_default, nama_target)
                     else:
-                        _, t = muat_target(None, th)
+                        _, t = muat_target(nama_target, th)
                         pasangan = [(t, rekap.lengkap(conn, t))]
                     per_tahun = {}
                     for t, d in pasangan:
@@ -417,32 +474,36 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             try:
                 conn = buka_readonly(db_path)
                 try:
-                    data = data_spse(conn, th, q.get("tahun") is None)
+                    data = data_spse(conn, th, q.get("tahun") is None, _param_satker(q))
                 finally:
                     conn.close()
                 isi = baris_excel_spse(data)
                 if not isi:
-                    return self._json(404, {"error": "Belum ada paket SPSE milik satker ini yang diambil detailnya."})
-                urls = [b["link"] for b in data["baris"] if b["milik"] and b["is_active"]]
+                    return self._json(404, {"error": "Belum ada paket SPSE yang dirinci lengkap untuk pilihan ini. Jalankan Ambil Data + Detail di halaman SPSE."})
+                urls = [b["link"] for b in data["baris"] if b["lengkap"] and b["is_active"]]
                 xlsx = excel.buat_xlsx_tabel({"SPSE Non-Tender": (KOLOM_EXCEL_SPSE, isi)}, {"SPSE Non-Tender": {2: urls}})
                 self._unduh_xlsx(xlsx, f"SPSE_NonTender_{data['tahun_dipilih']}_{datetime.datetime.now():%Y-%m-%d_%Hh%M}.xlsx")
             except sqlite3.Error as e:
                 self._json(500, {"error": f"Database belum siap: {e}"})
+            except Exception as e:
+                self._json(500, {"error": f"Gagal membuat Excel: {e!r}"})
 
         def _excel_banding(self, q, th):
             try:
                 conn = buka_readonly(db_path)
                 try:
-                    data = data_banding(conn, th, q.get("tahun") is None)
+                    data = data_banding(conn, th, q.get("tahun") is None, _param_satker(q))
                 finally:
                     conn.close()
                 if not data["baris"]:
                     return self._json(404, {"error": "Tidak ada data untuk dibandingkan."})
                 xlsx = excel.buat_xlsx_tabel({"Perbandingan": (KOLOM_EXCEL_BANDING, baris_excel_banding(data))},
-                                             {"Perbandingan": {2: [b.get("link_spse") for b in data["baris"]]}})
+                                             {"Perbandingan": {3: [b.get("link_sirup") for b in data["baris"]], 4: [b.get("link_spse") for b in data["baris"]]}})
                 self._unduh_xlsx(xlsx, f"Banding_SiRUP_SPSE_{data['tahun_dipilih']}_{datetime.datetime.now():%Y-%m-%d_%Hh%M}.xlsx")
             except sqlite3.Error as e:
                 self._json(500, {"error": f"Database belum siap: {e}"})
+            except Exception as e:
+                self._json(500, {"error": f"Gagal membuat Excel: {e!r}"})
 
         def _jadwal_spse(self, q):
             kode = (q.get("kode", [""])[0]).strip()
@@ -451,7 +512,7 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             try:
                 conn = buka_readonly(db_path)
                 try:
-                    _, lpse, _ = _konfig_spse()
+                    _, lpse = _konfig_spse()
                     data = banding._jadwal_paket(conn, lpse, "nontender", kode)
                 finally:
                     conn.close()
@@ -465,7 +526,8 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
                 return self._json(403, {"error": "Host tidak diizinkan."})
             q = parse_qs(u.query)
             th = parse_tahun(q, tahun_default)
-            kunci = (u.path, str(th), q.get("target", [None])[0])
+            nama_target = q.get("target", [None])[0] or None
+            kunci = (u.path, str(th), nama_target)
             if u.path == "/":
                 return self._kirim(200, "text/html; charset=utf-8", HTML.read_bytes())
             if u.path == "/grafik":
@@ -479,52 +541,61 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
                 return self._excel_banding(q, th)
             if u.path == "/api/spse/jadwal":
                 return self._jadwal_spse(q)
+            if u.path == "/api/satker":
+                return self._api(("satker", nama_target), lambda conn: (200, data_satker(conn)))
+            if u.path == "/api/satker/cari":
+                try:
+                    return self._json(200, _tugas.cari_satker_nama((q.get("q", [""])[0]).strip(), q.get("klpd", [None])[0]))
+                except ValueError as e:
+                    return self._json(400, {"error": str(e)})
+                except Exception as e:
+                    return self._json(502, {"error": f"Gagal membaca direktori SiRUP: {e!r}"})
             if u.path == "/api/tugas":
                 return self._json(200, {**tugas.status(), "kode_basi": sidik_kode() > sidik_awal})
             if u.path == "/api/excel":
                 return self._excel(q, th)
             if u.path == "/api/statistik":
                 def hitung(conn):
-                    _, dasar = muat_target(None, tahun_default)
-                    data = statistik.statistik_semua(conn, lambda y: muat_target(None, y)[1], dasar["id_satker_semua"])
+                    _, dasar = muat_target(nama_target, tahun_default)
+                    data = statistik.statistik_semua(conn, lambda y: muat_target(nama_target, y)[1], dasar["id_satker_semua"])
                     data["target"] = {"satker_nama": dasar["satker_nama"], "klpd_nama": dasar["klpd_nama"]}
                     return 200, data
                 return self._api(kunci, hitung)
             if u.path == "/api/spse":
-                return self._api(kunci, lambda conn: (200, data_spse(conn, th, q.get("tahun") is None)))
+                return self._api(kunci + (_param_satker(q), q.get("rinci", [""])[0]), lambda conn: (200, data_spse(conn, th, q.get("tahun") is None, _param_satker(q), q.get("rinci", [""])[0] or None)))
             if u.path == "/api/banding":
-                return self._api(kunci, lambda conn: (200, data_banding(conn, th, q.get("tahun") is None)))
+                return self._api(kunci + (_param_satker(q),), lambda conn: (200, data_banding(conn, th, q.get("tahun") is None, _param_satker(q))))
             if u.path == "/api/jalan":
-                return self._api(kunci, hitung_jalan)          # daftar jalan/gang UNIK lintas semua tahun
+                return self._api(kunci, lambda conn: hitung_jalan(conn, nama_target))          # daftar jalan/gang UNIK lintas semua tahun
             if u.path == "/api/perubahan":
                 def hitung(conn):
                     if th == "semua":
                         baris = []
-                        for t, _ in semua_dari_db(conn, tahun_default):
+                        for t, _ in semua_dari_db(conn, tahun_default, nama_target):
                             baris += database.perubahan(conn, t)
                         baris.sort(key=lambda b: -b["id"])
                     else:
-                        baris = database.perubahan(conn, muat_target(None, th)[1])
+                        baris = database.perubahan(conn, muat_target(nama_target, th)[1])
                     return 200, {"baris": baris}
                 return self._api(kunci, hitung)
             if u.path == "/api/database":
                 def hitung(conn):
                     if th == "semua":
-                        daftar = semua_dari_db(conn, tahun_default)
+                        daftar = semua_dari_db(conn, tahun_default, nama_target)
                         if not daftar:
                             return 404, {"error": "Belum ada data di database."}
                         baris = []
                         for t, d in daftar:
                             baris += database.baris(conn, t, d)
                         return 200, {"versi": "|".join(d["versi"] for _, d in daftar), "kolom": database.KOLOM, "baris": baris}
-                    _, t = muat_target(q.get("target", [None])[0], th)
+                    _, t = muat_target(nama_target, th)
                     data = rekap.lengkap(conn, t)
                     return 200, {"versi": data["versi"], "kolom": database.KOLOM, "baris": database.baris(conn, t, data)}
                 return self._api(kunci, hitung)
             if u.path == "/api/rekap":
                 def hitung(conn):
                     if th == "semua":
-                        daftar = semua_dari_db(conn, tahun_default)
+                        daftar = semua_dari_db(conn, tahun_default, nama_target)
                         if not daftar:
                             return 404, {"error": "Belum ada data di database."}
                         data = semua_tahun.gabung(daftar)
@@ -532,7 +603,7 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
                         target = {"nama": "semua-tahun", **{k: v for k, v in t0.items() if k not in ("klasifikasi", "periksa", "lokasi")},
                                   "tahun": "semua", "semua": True, "tahun_daftar": [t["tahun"] for t, _ in daftar]}
                     else:
-                        nama, t = muat_target(q.get("target", [None])[0], th)
+                        nama, t = muat_target(nama_target, th)
                         data = rekap.lengkap(conn, t)
                         target = {"nama": nama, **{k: v for k, v in t.items() if k not in ("klasifikasi", "periksa")}}
                     data["lokasi"].pop("per_paket", None)       # sudah ada di data["paket"]

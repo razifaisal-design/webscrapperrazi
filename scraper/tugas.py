@@ -11,7 +11,7 @@ from pathlib import Path
 from . import konfig
 from .core import database, db, rekap
 from .core.http import DiblokirError, SopanClient
-from .sources import sirup, sirup_detail, spse
+from .sources import direktori, sirup, sirup_detail, spse
 
 ROOT = Path(__file__).resolve().parents[1]
 KONEKSI_MAKS, JEDA_MIN = 10, 0.2
@@ -85,6 +85,19 @@ def tentukan_id_satker(conn, target, client, log=print):
     if conn.execute("SELECT 1 FROM sirup_paket WHERE id_satker=? AND tahun=? LIMIT 1", (asal, target["tahun"])).fetchone():
         return asal, False
     urutan = [asal] + [i for i in target.get("id_satker_semua", []) if i != asal]
+    if target.get("klpd_id"):                                   # satker dikenali lewat NAMA: tanya direktori SiRUP untuk tahun ini
+        try:
+            cid, kembar = direktori.id_untuk_tahun(direktori.daftar_satker(client, target["klpd_id"], target["tahun"]), target["satker_nama"])
+            if cid:
+                urutan = [cid] + [i for i in urutan if i != cid]
+                if kembar:
+                    log(f"Catatan: ada satker lain dengan nama yang sama di SiRUP tahun {target['tahun']} (idSatker {', '.join(map(str, kembar))}); dipakai yang paketnya terbanyak ({cid}).")
+            else:
+                log(f"Nama satker '{target['satker_nama']}' tidak ditemukan di direktori SiRUP tahun {target['tahun']}; mencoba idSatker yang dikenal.")
+        except DiblokirError:
+            raise
+        except Exception as e:
+            log(f"(direktori satker tidak bisa dibaca: {e!r}; mencoba idSatker yang dikenal)")
     for cid in urutan:
         total = sum(sirup.total_paket(client, jenis, dict(target, id_satker=cid)) for jenis in ("penyedia", "swakelola"))
         if total > 0:
@@ -129,7 +142,7 @@ def _selesaikan_target(conn, target, jeda, buat_klien, log):
 def _catat_id_satker(target, log):
     """Setelah pengambilan BERHASIL: simpan idSatker tahun ini ke config bila berbeda dari bawaan."""
     try:
-        if konfig.simpan_id_satker(target["tahun"], target["id_satker"]):
+        if konfig.simpan_id_satker(target["tahun"], target["id_satker"], target.get("nama")):
             log(f"Config diperbarui: tahun {target['tahun']} memakai idSatker {target['id_satker']} (config/targets.json).")
     except Exception as e:                                  # catatan config tidak boleh menggagalkan pengambilan data
         log(f"(idSatker belum tercatat di config: {e!r})")
@@ -428,56 +441,111 @@ def _ambil_detail_spse(client, lpse, jenis, kode, rinci):
 
 
 def run_spse_detail(conn, jenis="nontender", lpse="pontianak", tahun=2026, jeda=1.5, usia_hari=7, semua=False, limit=None,
-                    satker=None, log=print, buat_klien=SopanClient, berhenti=None, progres=None):
-    """Ambil detail paket SPSE (1 koneksi). Tiap paket: tab Pengumuman (tanpa Syarat Kualifikasi). Untuk paket milik `satker`
-    (kosong = semua paket): tab Pemenang (semua kolom), Pemenang Berkontrak (cek nilai kontrak sudah diisi PPK), Jadwal
-    beserta riwayat perubahan tiap tahap. Return kode: 0 ok, 2 diblokir, 4 ada yang gagal, 130 dihentikan."""
-    cek_param(1, jeda)
-    antre = db.paket_perlu_detail_spse(conn, lpse, jenis, int(tahun), usia_hari, semua, satker=satker)
+                    satker=None, koneksi=1, log=print, buat_klien=SopanClient, berhenti=None, progres=None):
+    """Ambil detail paket SPSE dengan `koneksi` koneksi paralel (tiap koneksi menunggu `jeda` detik antar permintaan).
+    Tiap paket: tab Pengumuman (tanpa Syarat Kualifikasi). Untuk paket milik `satker` (kosong = semua paket): tab Pemenang
+    (semua kolom), Pemenang Berkontrak (cek nilai kontrak sudah diisi PPK), Jadwal beserta riwayat perubahan tiap tahap.
+    Hanya thread utama yang menulis ke database. Return kode: 0 ok, 2 diblokir, 4 ada yang gagal, 130 dihentikan."""
+    cek_param(koneksi, jeda)
+    koneksi = int(koneksi)
+    berhenti = berhenti or threading.Event()
+    status = db.status_detail_spse(conn, lpse, jenis, int(tahun), usia_hari, semua, satker=satker)
+    antre = [k for k, a in status if a]
+    # pemeriksaan awal: mana yang sudah lengkap, mana yang belum, dan kenapa
+    rincian = {}
+    for _, a in status:
+        rincian[a] = rincian.get(a, 0) + 1
+    log(f"Pemeriksaan awal {tahun}: {len(status)} paket di daftar - sudah lengkap {rincian.get(None, 0)}, perlu diambil {len(antre)}"
+        + ("" if not antre else " (" + ", ".join(f"{n} {db.ALASAN_DETAIL_SPSE[a]}" for a, n in rincian.items() if a) + ")."))
     if limit:
         antre = antre[:limit]
     if not antre:
-        log(f"Tidak ada detail SPSE yang perlu diambil untuk {tahun} (daftar kosong, atau semuanya sudah diambil dan tahapannya tidak berubah).")
+        log(f"Tidak ada detail SPSE yang perlu diambil untuk {tahun}: semuanya sudah lengkap. Centang 'Paksa ambil ulang semua detail' untuk mengambil ulang.")
         return 0
     sasaran = db.norm_satker(satker) if satker else None
     rinci = (lambda sat: sasaran is None or db.norm_satker(sat) == sasaran)             # noqa: E731
     log(f"SPSE {lpse} - {jenis} {tahun}: {len(antre)} paket" + (f"; rincian lengkap (pemenang, kontrak, jadwal) hanya untuk {satker}" if sasaran else "") +
-        f"; jeda {jeda:g} detik, 1 koneksi.")
-    client = buat_klien(jeda=jeda)
-    ok = gagal = 0
+        f"; {koneksi} koneksi, jeda {jeda:g} detik.")
+    if peringatan_laju(koneksi, jeda):
+        log(f"PERINGATAN laju: {peringatan_laju(koneksi, jeda)}")
+    if progres:
+        progres(0, len(antre), 0, 0)
+    lokal, klien, blok = threading.local(), [], []
+
+    def kerja(kode):
+        if berhenti.is_set():
+            return kode, None, None, "__batal__"
+        if not hasattr(lokal, "k"):
+            lokal.k = buat_klien(jeda=jeda)
+            klien.append(lokal.k)
+        try:
+            detail, jadwal = _ambil_detail_spse(lokal.k, lpse, jenis, kode, rinci)
+            return kode, detail, jadwal, None
+        except DiblokirError as e:
+            blok.append(e)
+            berhenti.set()                      # semua koneksi berhenti
+            return kode, None, None, "__batal__"
+        except Exception as e:                  # satu paket gagal tidak menghentikan yang lain
+            return kode, None, None, repr(e)
+
+    hasil = {"ok": 0, "gagal": 0, "selesai": 0}
+
+    def proses(f):
+        kode, detail, jadwal, err = f.result()
+        if err == "__batal__":
+            return
+        hasil["selesai"] += 1
+        n = hasil["selesai"]
+        if err is None:
+            db.simpan_detail_spse(conn, lpse, jenis, kode, detail, jadwal=jadwal)
+            hasil["ok"] += 1
+            if jadwal is None:
+                log(f"[{n}/{len(antre)}] {kode} {detail['satker'][:40]} (instansi lain - tanpa rincian)")
+            else:
+                log(f"[{n}/{len(antre)}] {kode} {detail['satker'][:30]} | pemenang: {detail['pemenang_nama'] or '-'} | kontrak: "
+                    f"{'Rp {:,.0f}'.format(detail['nilai_kontrak']).replace(',', '.') if detail['kontrak_terisi'] else 'belum diisi'} | jadwal {len(jadwal)} tahap")
+        else:
+            db.simpan_detail_spse(conn, lpse, jenis, kode, None, err)
+            hasil["gagal"] += 1
+            log(f"[{n}/{len(antre)}] {kode} GAGAL: {err}")
+        if progres:
+            progres(n, len(antre), hasil["ok"], hasil["gagal"])
+
+    ex = ThreadPoolExecutor(max_workers=koneksi)
+    futures = [ex.submit(kerja, kode) for kode in antre]
+    sudah = set()
     try:
-        for i, kode in enumerate(antre, 1):
-            if berhenti is not None and berhenti.is_set():
-                log("Dihentikan.")
-                return 130
-            try:
-                detail, jadwal = _ambil_detail_spse(client, lpse, jenis, kode, rinci)
-                db.simpan_detail_spse(conn, lpse, jenis, kode, detail, jadwal=jadwal)
-                ok += 1
-                if jadwal is None:
-                    log(f"[{i}/{len(antre)}] {kode} {detail['satker'][:40]} (instansi lain - tanpa rincian)")
-                else:
-                    log(f"[{i}/{len(antre)}] {kode} {detail['satker'][:30]} | pemenang: {detail['pemenang_nama'] or '-'} | kontrak: "
-                        f"{'Rp {:,.0f}'.format(detail['nilai_kontrak']).replace(',', '.') if detail['kontrak_terisi'] else 'belum diisi'} | jadwal {len(jadwal)} tahap")
-            except DiblokirError as e:
-                log(f"[BERHENTI] {e}")
-                return 2
-            except Exception as e:                       # satu paket gagal tidak menghentikan yang lain
-                db.simpan_detail_spse(conn, lpse, jenis, kode, None, repr(e))
-                gagal += 1
-                log(f"[{i}/{len(antre)}] {kode} GAGAL: {e!r}")
-            if progres:
-                progres(i, len(antre), ok, gagal)
+        for f in as_completed(futures):
+            proses(f)
+            sudah.add(f)
+            if berhenti.is_set():
+                break
+    except KeyboardInterrupt:
+        berhenti.set()
     finally:
-        client.close()
-    log(f"Selesai. {ok} paket berhasil, {gagal} gagal.")
-    return 4 if gagal else 0
+        for f in futures:
+            f.cancel()
+        ex.shutdown(wait=True)                   # tunggu yang sedang berjalan selesai
+        for f in futures:                        # simpan yang sudah terlanjur terambil
+            if f not in sudah and not f.cancelled():
+                proses(f)
+        for k in klien:
+            k.close()
+    if blok:
+        log(f"[BERHENTI] {blok[0]} - semua koneksi dihentikan; yang sudah diambil ({hasil['ok']}) tetap tersimpan.")
+        return 2
+    if berhenti.is_set() and hasil["selesai"] < len(antre):
+        log(f"Dihentikan. {hasil['ok']} paket tersimpan; jalankan lagi untuk melanjutkan.")
+        return 130
+    log(f"Selesai. {hasil['ok']} paket berhasil, {hasil['gagal']} gagal.")
+    return 4 if hasil["gagal"] else 0
 
 
 def run_spse_semua(conn, jenis="nontender", lpse="pontianak", tahun=2026, jeda=1.5, usia_hari=7, semua=False, force=False,
-                   limit=None, satker=None, log=print, progres=None, tahap=None, berhenti=None, buat_klien=SopanClient):
-    """SATU PROSES SPSE: tahap 1 daftar paket (100 per halaman), tahap 2 detail paket. Tahap 2 hanya jalan bila tahap 1 berhasil."""
-    cek_param(1, jeda)
+                   limit=None, satker=None, koneksi=1, log=print, progres=None, tahap=None, berhenti=None, buat_klien=SopanClient):
+    """SATU PROSES SPSE: tahap 1 daftar paket (100 per halaman, selalu 1 koneksi), tahap 2 detail paket (`koneksi` paralel).
+    Tahap 2 hanya jalan bila tahap 1 berhasil."""
+    cek_param(koneksi, jeda)
     berhenti = berhenti or threading.Event()
     if tahap:
         tahap(1, 2, "Daftar paket SPSE")
@@ -495,9 +563,164 @@ def run_spse_semua(conn, jenis="nontender", lpse="pontianak", tahun=2026, jeda=1
         if tahun in (None, "semua") else [int(tahun)]
     kode_akhir = 0
     for th in tahun_list:
-        k = run_spse_detail(conn, jenis, lpse, th, jeda=jeda, usia_hari=usia_hari, semua=semua, limit=limit, satker=satker, log=log,
+        k = run_spse_detail(conn, jenis, lpse, th, jeda=jeda, usia_hari=usia_hari, semua=semua, limit=limit, satker=satker, koneksi=koneksi, log=log,
                             buat_klien=buat_klien, berhenti=berhenti, progres=progres)
         if k in (2, 130):
             return k
         kode_akhir = kode_akhir or k
     return kode_akhir
+
+
+# ======================= satker dikenali lewat NAMA =======================
+def _klpd_bawaan(klpd_nama=None, buat_klien=SopanClient, tahun=None):
+    """(klpd_id, klpd_nama resmi, tahun) untuk K/L/PD yang dituju; bawaan = K/L/PD target bawaan di config."""
+    cfg_nama, dasar = konfig.muat_target(None)
+    klpd_nama = klpd_nama or dasar.get("klpd_nama")
+    tahun = int(tahun or dasar["tahun"])
+    if dasar.get("klpd_id") and (not klpd_nama or direktori.norm(klpd_nama) == direktori.norm(dasar.get("klpd_nama"))):
+        return dasar["klpd_id"], dasar["klpd_nama"], tahun
+    client = buat_klien(jeda=1.0)
+    try:
+        k = direktori.cari_klpd(client, klpd_nama, tahun)
+    finally:
+        client.close()
+    if not k:
+        raise ValueError(f"K/L/PD '{klpd_nama}' tidak ditemukan di SiRUP tahun {tahun}.")
+    return k["id"], k["nama"], tahun
+
+
+def cari_satker_nama(nama, klpd_nama=None, tahun=None, buat_klien=SopanClient):
+    """Cari satker lewat NAMA di direktori SiRUP -> {klpd, tahun, kandidat:[{nama, paket, cocok}]} (tanpa idSatker untuk pengguna)."""
+    klpd_id, klpd_resmi, tahun = _klpd_bawaan(klpd_nama, buat_klien, tahun)
+    client = buat_klien(jeda=1.0)
+    try:
+        daftar = direktori.daftar_satker(client, klpd_id, tahun)
+    finally:
+        client.close()
+    return {"klpd": klpd_resmi, "tahun": tahun, "kandidat": [{"nama": k["nama"], "paket": k["paket"], "cocok": k["cocok"]} for k in direktori.cari_nama(daftar, nama)]}
+
+
+def tambah_satker_nama(nama, klpd_nama=None, tahun=None, buat_klien=SopanClient):
+    """Daftarkan satker (dikenali lewat nama) ke config. Nama harus cocok persis (setelah dinormalkan) atau hanya satu kandidat.
+    -> (kunci_target, nama satker resmi). ValueError bila tidak ada / lebih dari satu kandidat."""
+    klpd_id, klpd_resmi, tahun = _klpd_bawaan(klpd_nama, buat_klien, tahun)
+    client = buat_klien(jeda=1.0)
+    try:
+        daftar = direktori.daftar_satker(client, klpd_id, tahun)
+    finally:
+        client.close()
+    kand = direktori.cari_nama(daftar, nama)
+    persis = [k for k in kand if k["cocok"] == "persis"]
+    if len({direktori.norm(k["nama"]) for k in persis}) == 1:
+        pilih = max(persis, key=lambda k: k["paket"])
+    elif len(kand) == 1:
+        pilih = kand[0]
+    elif not kand:
+        raise ValueError(f"Tidak ada satker bernama mirip '{nama}' di {klpd_resmi} (tahun {tahun}).")
+    else:
+        raise ValueError(f"Nama '{nama}' cocok dengan {len(kand)} satker: " + "; ".join(k["nama"] for k in kand[:6]) + ". Tulis nama yang lebih lengkap.")
+    kunci = konfig.tambah_target(pilih["nama"], klpd_resmi, klpd_id, pilih["id"], None, tahun)
+    return kunci, pilih["nama"]
+
+
+# ======================= periksa RUP langsung ke SiRUP (lewat kode RUP) =======================
+def kode_rup_tak_berpasangan(conn, tahun_list=None, satker=None):
+    """Kode RUP yang disebut paket SPSE tetapi tidak ada di daftar SiRUP satkernya (status 'Tidak ada di daftar SiRUP'). Dihitung dari
+    perbandingan yang sama dengan halaman Perbandingan."""
+    from .core import banding
+    nama, dasar = konfig.muat_target(None)
+    lpse = (dasar.get("spse") or {}).get("lpse", "pontianak")
+    if tahun_list is None:
+        tahun_list = [t for (t,) in conn.execute("SELECT DISTINCT tahun FROM spse_paket WHERE lpse=? AND jenis='nontender' ORDER BY tahun", (lpse,))]
+    h = banding.hitung(conn, lpse, "nontender", tahun_list, konfig.satker_sirup(), satker)
+    kode = []
+    for b in h["baris"]:
+        if b["status"] == "Tidak ada di daftar SiRUP":
+            kode += [k.strip() for k in (b.get("kode_rup_spse") or "").split(",") if k.strip()]
+    return list(dict.fromkeys(kode))
+
+
+def run_periksa_rup(conn, kodes, koneksi=1, jeda=1.5, ulang=False, log=print, buat_klien=SopanClient, berhenti=None, progres=None):
+    """Buka halaman detail RUP (sirup.inaproc.id/.../detailPaketPenyediaPublic2017/{kode}) untuk tiap kode di `kodes` yang belum
+    pernah dicek (atau semuanya bila `ulang`). Tujuannya: paket yang tayang di SPSE seharusnya ada di SiRUP; di sini dibuktikan
+    apakah RUP-nya memang ada walau tidak tampil di daftar satker. Return kode: 0 ok, 2 diblokir, 4 ada yang gagal, 130 dihentikan."""
+    import httpx
+    cek_param(koneksi, jeda)
+    koneksi = int(koneksi)
+    berhenti = berhenti or threading.Event()
+    sudah = {k for (k,) in conn.execute("SELECT kode_rup FROM sirup_luar_daftar WHERE error IS NULL")}
+    antre = [k for k in kodes if ulang or k not in sudah]
+    log(f"Periksa RUP ke SiRUP: {len(kodes)} kode RUP, {len(antre)} perlu dibuka" + ("" if ulang else f" ({len(kodes) - len(antre)} sudah pernah dicek)") +
+        f"; {koneksi} koneksi, jeda {jeda:g} detik.")
+    if not antre:
+        return 0
+    if progres:
+        progres(0, len(antre), 0, 0)
+    lokal, klien, blok = threading.local(), [], []
+
+    def kerja(kode):
+        if berhenti.is_set():
+            return kode, "batal", None
+        if not hasattr(lokal, "k"):
+            lokal.k = buat_klien(jeda=jeda)
+            klien.append(lokal.k)
+        try:
+            return kode, "ada", sirup_detail.ambil_detail(lokal.k, "penyedia", kode)
+        except DiblokirError as e:
+            blok.append(e)
+            berhenti.set()
+            return kode, "batal", None
+        except httpx.HTTPStatusError as e:                  # SiRUP membalas galat untuk kode yang tidak ada
+            return kode, "tidak ada", f"HTTP {e.response.status_code}"
+        except sirup_detail.DetailError as e:
+            return kode, "tidak ada", str(e)
+        except Exception as e:
+            return kode, "galat", repr(e)
+
+    hasil = {"ada": 0, "tidak ada": 0, "galat": 0, "selesai": 0}
+
+    def proses(f):
+        kode, st, d = f.result()
+        if st == "batal":
+            return
+        link = sirup_detail.URL_DETAIL["penyedia"].format(kode=kode)
+        if st == "ada":
+            db.simpan_rup_luar_daftar(conn, kode, d, link=link)
+            log(f"[{hasil['selesai'] + 1}/{len(antre)}] {kode} ADA di SiRUP: {d['satuan_kerja'][:34]} | {d['nama_paket'][:60]}")
+        elif st == "tidak ada":
+            db.simpan_rup_luar_daftar(conn, kode, None, ditemukan=0, error=None, link=link)
+            log(f"[{hasil['selesai'] + 1}/{len(antre)}] {kode} TIDAK ADA di SiRUP ({d})")
+        else:
+            db.simpan_rup_luar_daftar(conn, kode, None, ditemukan=None, error=d, link=link)
+            log(f"[{hasil['selesai'] + 1}/{len(antre)}] {kode} GALAT: {d}")
+        hasil[st] += 1
+        hasil["selesai"] += 1
+        if progres:
+            progres(hasil["selesai"], len(antre), hasil["ada"] + hasil["tidak ada"], hasil["galat"])
+
+    ex = ThreadPoolExecutor(max_workers=koneksi)
+    futures = [ex.submit(kerja, k) for k in antre]
+    terproses = set()
+    try:
+        for f in as_completed(futures):
+            proses(f)
+            terproses.add(f)
+            if berhenti.is_set():
+                break
+    finally:
+        for f in futures:
+            f.cancel()
+        ex.shutdown(wait=True)
+        for f in futures:
+            if f not in terproses and not f.cancelled():
+                proses(f)
+        for k in klien:
+            k.close()
+    if blok:
+        log(f"[BERHENTI] {blok[0]} - yang sudah dicek ({hasil['selesai']}) tetap tersimpan.")
+        return 2
+    if berhenti.is_set() and hasil["selesai"] < len(antre):
+        log(f"Dihentikan. {hasil['selesai']} kode tersimpan; jalankan lagi untuk melanjutkan.")
+        return 130
+    log(f"Selesai. Ada di SiRUP: {hasil['ada']}, tidak ada: {hasil['tidak ada']}, galat: {hasil['galat']}.")
+    return 4 if hasil["galat"] else 0

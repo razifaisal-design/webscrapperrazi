@@ -90,7 +90,7 @@ class TestRunDaftar(Dasar):
         self.assertEqual(kode, 0)
         self.assertEqual(self.conn.execute("SELECT COUNT(*), MIN(id_satker), MAX(id_satker) FROM sirup_paket").fetchone()[:], (120, LAMA, LAMA))
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM sirup_paket WHERE sumber_dana LIKE '%,%'").fetchone()[0], 0)   # sumber dana rapi
-        self.simpan.assert_called_once_with(TAHUN, LAMA)
+        self.simpan.assert_called_once_with(TAHUN, LAMA, None)
 
     def test_run_kedua_tidak_menguji_ulang_idsatker(self):
         KlienPalsu.data = {(DEFAULT, TAHUN, "penyedia"): baris_penyedia(4)}

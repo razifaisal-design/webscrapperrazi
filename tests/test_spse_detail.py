@@ -148,6 +148,41 @@ class TestRunDetail(unittest.TestCase):
         self.jalan(klien)
         self.assertEqual(klien.url, [])                               # semua sudah ada; instansi lain tidak diambil ulang
 
+    def test_paralel_hasil_sama_dan_semua_tersimpan(self):
+        for k in ("444", "555", "666", "777"):
+            self.conn.execute("INSERT INTO spse_paket(lpse,jenis,kode_paket,tahun,nama_paket,tahapan,is_active) VALUES('pontianak','nontender',?,2026,'x','Paket Sudah Selesai',1)", (k,))
+        self.conn.commit()
+        klien = KlienPalsu(lain={"555"})
+        self.assertEqual(self.jalan(klien, koneksi=3)[0], 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM spse_detail WHERE error IS NULL").fetchone()[0], 7)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM spse_detail WHERE lengkap=1").fetchone()[0], 6)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM spse_jadwal").fetchone()[0], 30)
+
+    def test_paralel_diblokir_menghentikan_semua(self):
+        kode, _ = self.jalan(KlienPalsu(blokir="222"), koneksi=2)
+        self.assertEqual(kode, 2)
+
+    def test_koneksi_di_luar_batas_ditolak(self):
+        with self.assertRaises(ValueError):
+            self.jalan(KlienPalsu(), koneksi=0)
+
+    def test_paket_batal_tidak_diulang_terus(self):
+        # detail menulis 'Paket Sudah Selesai' padahal daftar menulis 'Paket Dibatalkan': tidak boleh dianggap berubah selamanya
+        self.conn.execute("UPDATE spse_paket SET tahapan='Paket Dibatalkan' WHERE kode_paket='333'")
+        self.jalan(KlienPalsu())
+        klien = KlienPalsu()
+        kode, logs = self.jalan(klien)
+        self.assertEqual(klien.url, [])
+        self.assertTrue(any("sudah lengkap 3" in x for x in logs))
+
+    def test_pemeriksaan_awal_menjelaskan_alasan_dan_paksa_mengambil_semua(self):
+        self.jalan(KlienPalsu(), limit=1)
+        _, logs = self.jalan(KlienPalsu(), limit=0)
+        self.assertTrue(any("sudah lengkap 1, perlu diambil 2" in x and "2 belum pernah diambil" in x for x in logs), logs)
+        klien = KlienPalsu()
+        self.jalan(klien, semua=True)
+        self.assertEqual(self.kode_diminta(klien), {"111", "222", "333"})
+
     def test_tanpa_satker_semua_dirinci(self):
         klien = KlienPalsu(lain={"222"})
         self.jalan(klien, satker=None)

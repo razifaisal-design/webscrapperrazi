@@ -16,6 +16,8 @@
     </div>
     <div class="ctl">
       <span class="live" id="live"><i class="dot"></i><span id="liveTeks">…</span></span>
+      <label class="sub" for="satker">Satker / Dinas</label>
+      <select id="satker" aria-label="Satker atau dinas" style="max-width:300px"></select>
       <label class="sub" for="tahun">Tahun</label>
       <select id="tahun" aria-label="Tahun anggaran"></select>
       <label class="sub" for="interval">Auto-refresh</label>
@@ -24,7 +26,7 @@
         <option value="30">30 detik</option><option value="60">1 menit</option><option value="300">5 menit</option>
       </select>
       <span class="sub" id="jobTeks"></span>
-      <a class="btn" href="/grafik" target="_blank" rel="noopener" style="text-decoration:none">Grafik ↗</a>
+      <a class="btn" id="linkGrafik" href="/grafik" target="_blank" rel="noopener" style="text-decoration:none">Grafik ↗</a>
       <button class="btn" id="bukaExcel">Unduh Excel…</button>
       <button class="btn" id="bukaAmbil">Ambil data…</button>
       <button class="btn" id="muat">Muat ulang</button>
@@ -45,7 +47,6 @@
   <section class="ambil" id="ambil" hidden aria-label="Ambil data dari SiRUP">
     <div class="agrid">
       <label>Tahun anggaran<select id="a-tahun"></select></label>
-      <label>ID satker SiRUP <span style="opacity:.8">(opsional)</span><input id="a-idsatker" type="text" inputmode="numeric" placeholder="kosong = otomatis" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit"></label>
       <label>Jumlah koneksi (detail)<select id="a-koneksi"><option>1</option><option>2</option><option>3</option><option>5</option></select></label>
       <label>Jeda tiap koneksi<select id="a-jeda"><option value="0.5">0,5 detik</option><option value="1">1 detik</option><option value="1.5" selected>1,5 detik</option><option value="2">2 detik</option><option value="3">3 detik</option></select></label>
       <label>Ambil ulang detail yang lebih tua dari<select id="a-usia"><option value="1">1 hari</option><option value="3">3 hari</option><option value="7" selected>7 hari</option><option value="30">30 hari</option><option value="0">Tidak (hanya yang pagu/namanya berubah)</option></select></label>
@@ -55,8 +56,16 @@
     <div class="aksi">
       <button class="btn utama" id="a-mulai">Ambil Data + Detail</button>
       <button class="btn bahaya" id="a-henti" disabled>Hentikan</button>
-      <span class="sub">idSatker di SiRUP <b>bisa berbeda tiap tahun</b> (mis. 2021 = 69427, 2022+ = 173394). Dibiarkan kosong, aplikasi mencari sendiri dan mencatatnya di config.</span>
+      <span class="sub">Satker dikenali lewat <b>nama</b>; idSatker di SiRUP (yang bisa berbeda tiap tahun) dicari otomatis dari direktori SiRUP.</span>
       <span class="sub">Satu proses: tahap 1 daftar RUP (tahu paket baru / revisi RUP), tahap 2 detail paket, lalu database Jalan &amp; Gang. Daftar selalu 1 koneksi; koneksi di atas untuk detail.</span>
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <b>Tambah satker / dinas</b> <span class="sub">tulis namanya (boleh sebagian), mis. "pekerjaan umum" — dicari di direktori SiRUP untuk K/L/PD <span id="t-klpd">…</span></span>
+      <div class="aksi">
+        <input id="t-nama" type="text" placeholder="nama satker / dinas" style="padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit;min-width:280px">
+        <button class="btn" id="t-cari">Cari</button>
+      </div>
+      <div id="t-hasil"></div>
     </div>
     <div id="a-status"></div>
   </section>
@@ -109,9 +118,12 @@ const teksPaket = (p) => [p.kode_rup, p.nama_paket, p.uraian, p.jalan, gabung(p.
 
 /* ======================= state ======================= */
 let data = null, teksTerakhir = "", tab = baca("rekap_tab", "mak");
+if (!["mak", "uraian", "kategori", "perbaikan", "lokasi", "daftarjalan", "daftargang", "database", "perubahan", "periksa"].includes(tab)) tab = "mak";   // tab tersimpan yang sudah tidak ada
 let interval = parseInt(baca("rekap_interval", "30"), 10), timer = null, sedang = false;
 let tahun = baca("rekap_tahun", "");
-const qs = () => (tahun ? `?tahun=${encodeURIComponent(tahun)}` : "");
+let targetNama = baca("rekap_target", "");                     // kunci satker di config; kosong = satker bawaan
+const qs = () => { const p = new URLSearchParams(); if (tahun) p.set("tahun", tahun); if (targetNama) p.set("target", targetNama); const t = p.toString(); return t ? "?" + t : ""; };
+const qsTarget = () => (targetNama ? `?target=${encodeURIComponent(targetNama)}` : "");
 const FILTER = {
   kategori: { kat: "Jalan", jp: "Semua", mak: "Semua" },
   perbaikan: { jp: "Semua" },
@@ -188,6 +200,51 @@ $("tahun").addEventListener("change", (e) => {
   muat();
 });
 
+/* ======================= satker (dikenali lewat nama) ======================= */
+const SK = { daftar: [] };
+async function muatSatker() {
+  try {
+    const j = await (await fetch("/api/satker", { cache: "no-store" })).json();
+    SK.daftar = j.satker;
+    if (targetNama && !SK.daftar.some((x) => x.target === targetNama)) { targetNama = ""; simpan("rekap_target", ""); }
+    $("satker").innerHTML = SK.daftar.map((x) => `<option value="${esc(x.target)}" ${(targetNama || (SK.daftar.find((y) => y.bawaan) || {}).target) === x.target ? "selected" : ""}>${esc(x.satker)} — ${rp.format(x.paket)} paket</option>`).join("");
+    const k = SK.daftar[0]; if (k) $("t-klpd").textContent = k.klpd || "";
+    $("linkGrafik").href = "/grafik" + qsTarget();
+  } catch (e) {}
+}
+function gantiSatker(nama) {
+  targetNama = nama; simpan("rekap_target", nama);
+  teksTerakhir = ""; DB.baris = null; DB.versi = null; JL.data = null; PR.baris = null;
+  Object.values(buka).forEach((x) => x.clear());
+  $("linkGrafik").href = "/grafik" + qsTarget();
+  muat();
+}
+$("satker").addEventListener("change", (e) => { const b = SK.daftar.find((x) => x.bawaan); gantiSatker(e.target.value === (b && b.target) ? "" : e.target.value); });
+$("t-cari").addEventListener("click", async () => {
+  const q = $("t-nama").value.trim(); if (!q) return;
+  $("t-hasil").innerHTML = `<div class="sub" style="margin-top:8px">Mencari…</div>`;
+  try {
+    const r = await fetch("/api/satker/cari?q=" + encodeURIComponent(q), { cache: "no-store" }), j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    $("t-hasil").innerHTML = j.kandidat.length
+      ? `<div class="sub" style="margin:8px 0 4px">${j.kandidat.length} satker di ${esc(j.klpd)} (TA ${j.tahun}) — klik untuk menambahkan:</div>` +
+        j.kandidat.slice(0, 12).map((k) => `<div><button class="btn" data-tambah="${esc(k.nama)}" style="margin:2px 0">+ ${esc(k.nama)}</button> <span class="sub">${rp.format(k.paket)} paket · ${esc(k.cocok)}</span></div>`).join("")
+      : `<div class="note warn" style="margin-top:8px">Tidak ada satker bernama mirip "${esc(q)}" di ${esc(j.klpd)}.</div>`;
+  } catch (e) { $("t-hasil").innerHTML = `<div class="note err" style="margin-top:8px">${esc(e.message)}</div>`; }
+});
+$("t-nama").addEventListener("keydown", (e) => { if (e.key === "Enter") $("t-cari").click(); });
+$("t-hasil").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-tambah]"); if (!b) return;
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/satker/tambah", { method: "POST", headers: { "Content-Type": "application/json", "X-Pantau": "1" }, body: JSON.stringify({ nama: b.dataset.tambah }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    $("t-hasil").innerHTML = `<div class="note ok" style="margin-top:8px"><b>${esc(j.satker_nama)}</b> ditambahkan. Pilih di kotak <b>Satker / Dinas</b> di atas, lalu klik <b>Ambil Data + Detail</b> untuk mengambil datanya.</div>`;
+    await muatSatker();
+  } catch (err) { b.disabled = false; $("t-hasil").insertAdjacentHTML("beforeend", `<div class="note err" style="margin-top:8px">${esc(err.message)}</div>`); }
+});
+
 /* ======================= bagian atas ======================= */
 function tabTersedia(t) {
   if (t === "kategori" || t === "perbaikan") return !!data.klasifikasi;
@@ -254,7 +311,7 @@ function gambar() {
 }
 async function muatJalan() {
   try {
-    const r = await fetch("/api/jalan", { cache: "no-store" });
+    const r = await fetch("/api/jalan" + qsTarget(), { cache: "no-store" });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     JL.data = j; JL.error = null;
@@ -712,7 +769,7 @@ function isiTahunExcel() {
 }
 function perbaruiTautanExcel() {
   const th = $("x-tahun").value || "semua";
-  $("x-unduh").href = `/api/excel?tahun=${encodeURIComponent(th)}&tidak_aktif=${$("x-nonaktif").checked ? 1 : 0}`;
+  $("x-unduh").href = `/api/excel?tahun=${encodeURIComponent(th)}&tidak_aktif=${$("x-nonaktif").checked ? 1 : 0}` + (targetNama ? `&target=${encodeURIComponent(targetNama)}` : "");
   $("x-ket").textContent = "Kolom: Nomor, RUP, Nama paket, Jenis kegiatan, Jalan, Gang, Kecamatan, Kelurahan, MAK asli, Status MAK, Ada perubahan RUP, Pemeriksaan, Pagu.";
 }
 $("bukaExcel").addEventListener("click", () => { const p = $("excel"); p.hidden = !p.hidden; if (!p.hidden) isiTahunExcel(); });
@@ -793,7 +850,7 @@ $("bukaAmbil").addEventListener("click", () => { const p = $("ambil"); p.hidden 
 async function kirimTugas(jenis) {
   try {
     const r = await fetch("/api/tugas/mulai", { method: "POST", headers: { "Content-Type": "application/json", "X-Pantau": "1" },
-      body: JSON.stringify({ jenis, tahun: parseInt(A.tahun.value, 10), koneksi: parseInt(A.koneksi.value, 10), jeda: parseFloat(A.jeda.value), usia_hari: parseInt(A.usia.value, 10), semua: A.semua.checked, id_satker: ($("a-idsatker").value.trim() || null) }) });
+      body: JSON.stringify({ jenis, tahun: parseInt(A.tahun.value, 10), koneksi: parseInt(A.koneksi.value, 10), jeda: parseFloat(A.jeda.value), usia_hari: parseInt(A.usia.value, 10), semua: A.semua.checked, target: targetNama || null }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     gambarTugas(j); mulaiPoll();
@@ -837,6 +894,7 @@ cekTugas();
 setInterval(() => { if (!AMBIL.poll && !document.hidden) cekTugas(); }, 15000);   // periksa kode basi walau tidak ada tugas berjalan
 
 aturTimer();
+muatSatker();
 muat();
 </script>
 </body>

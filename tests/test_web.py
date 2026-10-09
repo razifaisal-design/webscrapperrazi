@@ -159,6 +159,185 @@ class TestWebTugas(unittest.TestCase):
         s, j = self.minta("GET", "/api/spse?tahun=semua")
         self.assertEqual(len(j["baris"]), 2)
 
+    def test_spse_semua_meneruskan_parameter(self):
+        got = []
+
+        def palsu(conn, jenis, lpse, tahun, **kw):
+            got.append((jenis, lpse, tahun, kw["jeda"], kw["usia_hari"], kw["semua"], kw["satker"], kw["koneksi"]))
+            kw["tahap"](1, 2, "Daftar paket SPSE")
+            return 0
+
+        def tunggu():
+            for _ in range(100):
+                if self.minta("GET", "/api/tugas")[1]["status"] != "berjalan":
+                    return
+                time.sleep(0.02)
+
+        with mock.patch.object(tugas, "run_spse_semua", palsu):
+            s, j = self.mulai(jenis="spse_semua", tahun=2026, koneksi=5, jeda=2, usia_hari=3, semua=True)
+            self.assertEqual((s, j["koneksi"]), (200, 5))               # koneksi untuk tahap detail ikut dipakai
+            tunggu()
+            self.mulai(jenis="spse_semua", tahun="semua", koneksi=2, jeda=1.5, satker="DINAS X")
+            tunggu()
+            self.mulai(jenis="spse_semua", tahun=2026, jeda=1.5, satker="__tidak")
+            tunggu()
+        self.assertEqual(got[0][2:6], (2026, 2.0, 3, True))
+        self.assertIsNone(got[0][6])                                  # tidak ada pilihan = semua satker (tidak dikunci ke satu dinas)
+        self.assertEqual((got[0][7], got[1][2], got[1][6], got[1][7]), (5, "semua", "DINAS X", 2))
+        self.assertEqual(got[2][6], "__tidak")                        # hanya Pengumuman
+
+    def test_halaman_dan_api_spse_dan_banding(self):
+        conn = db.buka(self.path)
+        conn.execute("INSERT INTO spse_paket(lpse,jenis,kode_paket,tahun,nama_paket,tahapan,is_active,link) VALUES('pontianak','nontender','900',2026,'Paket Uji','Evaluasi Penawaran',1,'http://x/900')")
+        conn.execute("INSERT INTO spse_detail(lpse,jenis,kode_paket,kode_rup,rup_json,satker,pagu,hps,lengkap,pemenang_terisi,kontrak_terisi,pemenang_nama,tahap) "
+                     "VALUES('pontianak','nontender','900','55','[{\"kode_rup\":\"55\",\"nama_paket\":\"Paket Uji\",\"sumber_dana\":\"APBD\"}]',"
+                     "'DINAS PERUMAHAN RAKYAT DAN KAWASAN PERMUKIMAN',1000,990,1,1,0,'CV Uji','Evaluasi Penawaran')")
+        conn.execute("INSERT INTO spse_jadwal(lpse,jenis,kode_paket,no,tahap,mulai,sampai,jumlah_perubahan,riwayat_json) VALUES('pontianak','nontender','900',1,'Upload Dokumen Penawaran','2020-01-01T08:00','2020-01-05T08:00',0,'[]')")
+        conn.execute("INSERT INTO sirup_paket(kode_rup,tahun,id_satker,jenis,nama_paket,pagu,metode_pemilihan,is_active,link) VALUES('55',2026,173394,'penyedia','Paket Uji',1000,'Pengadaan Langsung',1,'l')")
+        conn.commit()
+        conn.close()
+        for jalur, kata in (("/spse", b"SPSE Non-Tender"), ("/banding", b"Perbandingan"), ("/gaya.css", b"--bg"), ("/bersama.js", b"pasangTugas"), ("/", b"gaya.css")):
+            s, isi = self.minta("GET", jalur)
+            self.assertEqual(s, 200, jalur)
+            self.assertIn(kata, isi if isinstance(isi, bytes) else json.dumps(isi).encode(), jalur)
+        s, j = self.minta("GET", "/api/spse")
+        self.assertEqual(s, 200)
+        b = [x for x in j["baris"] if x["kode_paket"] == "900"][0]
+        self.assertEqual((b["lengkap"], b["upload_mulai"], b["kontrak_terisi"]), (1, "2020-01-01T08:00", 0))
+        self.assertEqual((j["ringkas"]["terinci"], j["ringkas"]["pagu"]), (1, 1000))
+        self.assertEqual([e["nama"] for e in j["satker_daftar"]], ["DINAS PERUMAHAN RAKYAT DAN KAWASAN PERMUKIMAN"])
+        s, j = self.minta("GET", "/api/spse?satker=DINAS+TIDAK+ADA")                    # filter satker: tidak ada yang cocok
+        self.assertEqual((j["ringkas"]["paket_aktif"], len(j["baris"])), (0, 0))
+        s, j = self.minta("GET", "/api/spse?satker=dinas+perumahan+rakyat+dan+kawasan+permukiman")
+        self.assertEqual(len(j["baris"]), 1)
+        s, j = self.minta("GET", "/api/banding")
+        self.assertEqual(s, 200)
+        r = [x for x in j["baris"] if x["kode_rup"] == "55"][0]
+        self.assertEqual((r["status"], r["kode_nontender"], r["pagu_sama"]), ("Sudah tayang", "900", True))
+        s, j = self.minta("GET", "/api/spse/jadwal?kode=900")
+        self.assertEqual((s, len(j["jadwal"])), (200, 1))
+        self.assertEqual(self.minta("GET", "/api/spse/jadwal?kode=abc")[0], 400)
+        for jalur in ("/api/spse/excel", "/api/banding/excel"):
+            c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+            c.request("GET", jalur, headers={"Host": f"127.0.0.1:{self.port}"})
+            r = c.getresponse()
+            isi = r.read()
+            c.close()
+            self.assertEqual(r.status, 200, jalur)
+            self.assertTrue(isi.startswith(b"PK"), jalur)             # berkas .xlsx = zip
+            if jalur == "/api/banding/excel":                         # tautan harus di kolom yang benar: RUP -> SiRUP, non tender -> SPSE
+                import io
+                from openpyxl import load_workbook
+                ws = load_workbook(io.BytesIO(isi)).active
+                kepala = [c.value for c in ws[1]]
+                baris = {c.value: c for c in ws[2]}
+                self.assertEqual(kepala[3:5], ["KODE RUP", "KODE NON TENDER"])
+                self.assertEqual(ws.cell(row=2, column=4).value, "55")
+                self.assertEqual(ws.cell(row=2, column=4).hyperlink.target, "l")                # link SiRUP
+                self.assertEqual(ws.cell(row=2, column=5).value, "900")
+                self.assertEqual(ws.cell(row=2, column=5).hyperlink.target, "http://x/900")     # link SPSE
+
+    def test_satker_baru_lewat_nama_rekap_dan_tugas_per_satker(self):
+        import shutil
+        from scraper import konfig
+        cfg = Path(self.tmp.name) / "targets.json"
+        shutil.copy(konfig.TARGETS, cfg)
+        for modul in (konfig, web):
+            p = mock.patch.object(modul, "TARGETS", cfg)
+            p.start()
+            self.addCleanup(p.stop)
+        kunci = konfig.tambah_target("DINAS PEKERJAAN UMUM DAN PENATAAN RUANG", "Kota Pontianak", "D199", 173393)
+        conn = db.buka(self.path)
+        conn.execute("INSERT INTO sirup_paket(kode_rup,tahun,id_satker,jenis,nama_paket,pagu,metode_pemilihan,is_active,link) VALUES('777',2026,173393,'penyedia','Paket PU',500,'Pengadaan Langsung',1,'l')")
+        conn.commit()
+        conn.close()
+        s, j = self.minta("GET", "/api/satker")
+        self.assertEqual({x["satker"]: x["paket"] for x in j["satker"]}["DINAS PEKERJAAN UMUM DAN PENATAAN RUANG"], 1)
+        s, j = self.minta("GET", f"/api/rekap?tahun=2026&target={kunci}")
+        self.assertEqual((s, j["paket_aktif"], j["target"]["satker_nama"]), (200, 1, "DINAS PEKERJAAN UMUM DAN PENATAAN RUANG"))
+        self.assertIsNone(j.get("klasifikasi"))                                # rekap umum: tanpa kategori Jalan/Saluran khusus Perkim
+        s, j = self.minta("GET", f"/api/rekap?tahun=semua&target={kunci}")
+        self.assertEqual((s, j["paket_dengan_detail"] + j["paket_aktif"]), (200, 1))
+        s, j = self.minta("GET", "/api/rekap?tahun=2026")                      # satker bawaan tidak tercampur
+        self.assertNotEqual(j["target"]["satker_nama"], "DINAS PEKERJAAN UMUM DAN PENATAAN RUANG")
+        self.assertEqual([r["kode_rup"] for r in self.minta("GET", f"/api/database?tahun=2026&target={kunci}")[1]["baris"]], ["777"])
+        self.assertEqual(self.minta("GET", f"/api/jalan?target={kunci}")[0], 200)
+        self.assertEqual(self.minta("GET", f"/api/statistik?target={kunci}")[0], 200)
+        self.assertEqual(self.mulai(target="tidak-ada")[0], 400)               # satker harus sudah terdaftar
+        s, j = self.mulai(jenis="daftar", tahun=2026, target=kunci)
+        self.assertEqual(s, 200)
+        for _ in range(100):
+            if self.panggilan:
+                break
+            time.sleep(0.02)
+        self.assertEqual(self.panggilan[0][0], "daftar")
+
+    def test_cari_dan_tambah_satker_lewat_nama(self):
+        dipanggil = []
+
+        def cari(nama, klpd=None, **kw):
+            dipanggil.append(("cari", nama))
+            return {"klpd": "Kota Pontianak", "tahun": 2026, "kandidat": [{"nama": "DINAS PERPUSTAKAAN DAN KEARSIPAN", "paket": 145, "cocok": "mengandung"}]}
+
+        def tambah(nama, klpd=None, **kw):
+            dipanggil.append(("tambah", nama))
+            if nama == "ganda":
+                raise ValueError("Nama 'ganda' cocok dengan 2 satker")
+            return "dinas-perpustakaan", "DINAS PERPUSTAKAAN DAN KEARSIPAN"
+
+        with mock.patch.object(tugas, "cari_satker_nama", cari), mock.patch.object(tugas, "tambah_satker_nama", tambah):
+            s, j = self.minta("GET", "/api/satker/cari?q=perpustakaan")
+            self.assertEqual((s, j["kandidat"][0]["nama"]), (200, "DINAS PERPUSTAKAAN DAN KEARSIPAN"))
+            self.assertNotIn("id", j["kandidat"][0])                           # pengguna hanya melihat nama
+            self.assertEqual(self.minta("POST", "/api/satker/tambah", {"nama": "x"})[0], 403)           # tanpa header dashboard ditolak
+            s, j = self.minta("POST", "/api/satker/tambah", {"nama": "perpustakaan"}, **{"X-Pantau": "1"})
+            self.assertEqual((s, j["satker_nama"]), (200, "DINAS PERPUSTAKAAN DAN KEARSIPAN"))
+            s, j = self.minta("POST", "/api/satker/tambah", {"nama": "ganda"}, **{"X-Pantau": "1"})
+            self.assertEqual(s, 400)
+            self.assertIn("cocok dengan 2", j["error"])
+        self.assertEqual(dipanggil, [("cari", "perpustakaan"), ("tambah", "perpustakaan"), ("tambah", "ganda")])
+
+    def test_excel_tahan_karakter_kontrol_di_nama_paket(self):
+        conn = db.buka(self.path)
+        conn.execute("INSERT INTO spse_paket(lpse,jenis,kode_paket,tahun,nama_paket,tahapan,is_active,link) VALUES('pontianak','nontender','901',2026,?,'x',1,'l')", ("Paket\x0bkontrol",))
+        conn.execute("INSERT INTO spse_detail(lpse,jenis,kode_paket,kode_rup,rup_json,satker,lengkap) VALUES('pontianak','nontender','901','1','[]',?,1)", ("DINAS\x0cX",))
+        conn.commit()
+        conn.close()
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", "/api/spse/excel", headers={"Host": f"127.0.0.1:{self.port}"})
+        r = c.getresponse()
+        isi = r.read()
+        c.close()
+        self.assertEqual(r.status, 200)
+        self.assertTrue(isi.startswith(b"PK"))
+
+    def test_tugas_periksa_rup_ke_sirup(self):
+        got = []
+
+        def kode(conn, tahun_list, satker):
+            got.append(("kode", tahun_list, satker))
+            return ["111", "222"]
+
+        def periksa(conn, kodes, **kw):
+            got.append(("periksa", kodes, kw["koneksi"], kw["jeda"], kw["ulang"]))
+            return 0
+
+        with mock.patch.object(tugas, "kode_rup_tak_berpasangan", kode), mock.patch.object(tugas, "run_periksa_rup", periksa):
+            s, j = self.mulai(jenis="banding_periksa", tahun=2026, koneksi=3, jeda=1.5, semua=True, satker="DINAS X")
+            self.assertEqual((s, j["koneksi"]), (200, 3))
+            for _ in range(100):
+                if self.minta("GET", "/api/tugas")[1]["status"] != "berjalan":
+                    break
+                time.sleep(0.02)
+            self.mulai(jenis="banding_periksa", tahun="semua", koneksi=1, jeda=1.5, satker="__semua")
+            for _ in range(100):
+                if len(got) >= 4:
+                    break
+                time.sleep(0.02)
+        self.assertEqual(got[0], ("kode", [2026], "DINAS X"))
+        self.assertEqual(got[1], ("periksa", ["111", "222"], 3, 1.5, True))
+        self.assertEqual(got[2], ("kode", None, None))                       # semua tahun, semua satker
+
     def test_id_satker_opsional_divalidasi_dan_diteruskan(self):
         for bad in ({"id_satker": "abc"}, {"id_satker": 0}, {"id_satker": -5}, {"id_satker": 10**10}):
             self.assertEqual(self.mulai(**bad)[0], 400, bad)

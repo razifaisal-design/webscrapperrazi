@@ -72,106 +72,173 @@ def _paket_spse(conn, lpse, jenis, tahun):
     return hasil
 
 
-def hitung(conn, lpse, jenis, tahun_list, id_satker, satker_nama, satker_alias=(), sekarang=None):
-    """Return {baris, ringkas, peringatan}. `id_satker` = satu id atau daftar id SiRUP; `tahun_list` = tahun yang dibandingkan."""
+def _baris_spse(conn, lpse, jenis, p, cara, sekarang, kode_grup=(), aktif=None, jumlah_paket=1):
+    """Bagian baris perbandingan yang berasal dari sisi SPSE (jadwal, pagu, HPS, penawaran, negosiasi, kontrak, pemenang)."""
+    jad = _jadwal_paket(conn, lpse, jenis, p["kode_paket"])
+    status, acuan = _tayang(jad, sekarang)
+    pagu_ref = sum((aktif[k]["pagu"] or 0) for k in kode_grup) if kode_grup else None
+    awal = awal_sampai = None
+    if acuan:
+        # jadwal ORIGINAL = yang tertua di riwayat perubahan tahap itu (bila pernah diubah)
+        riw = sorted(acuan["riwayat"], key=lambda x: x.get("tanggal_edit_iso") or "")
+        if riw:
+            awal, awal_sampai = riw[0].get("mulai_asli_iso"), riw[0].get("sampai_asli_iso")
+    return {
+        "kode_nontender": p["kode_paket"], "nama_spse": p["nama_paket"], "kode_rup_spse": ", ".join(x["kode_rup"] for x in p["rup"]),
+        "tahapan": p["tahapan"], "metode_spse": p["metode"] or p["metode_daftar"], "link_spse": p["link"], "satker_spse": p["satker"],
+        "kecocokan": cara, "status": status, "pagu_spse": p["pagu"], "hps": p["hps"],
+        "harga_penawaran": p["harga_penawaran"], "harga_terkoreksi": p["harga_terkoreksi"], "hasil_negosiasi": p["hasil_negosiasi"],
+        "nilai_kontrak": p["nilai_kontrak"], "pemenang": p["pemenang_nama"], "pemenang_terisi": p["pemenang_terisi"],
+        "kontrak_terisi": p["kontrak_terisi"], "lengkap": p["lengkap"],
+        "upload_mulai": acuan["mulai"] if acuan else None, "upload_sampai": acuan["sampai"] if acuan else None,
+        "upload_mulai_awal": awal, "upload_sampai_awal": awal_sampai, "jadwal_diubah": sum(t["jumlah_perubahan"] for t in jad), "jadwal": jad,
+        "jumlah_rup_gabungan": len(kode_grup), "pagu_sirup_gabungan": pagu_ref,
+        "pagu_sama": (None if p["pagu"] is None or pagu_ref is None else abs(pagu_ref - p["pagu"]) < 1),
+        "selisih_pagu": (None if p["pagu"] is None or pagu_ref is None else p["pagu"] - pagu_ref),
+        "jumlah_paket_spse": jumlah_paket,
+    }
+
+
+def _bandingkan(conn, lpse, jenis, tahun, ids, milik, tanpa_detail, sekarang, nama_satker, luar=None):
+    """Pasangkan RUP SiRUP (idSatker `ids`) dengan paket SPSE `milik` untuk satu satker & satu tahun -> daftar baris."""
+    baris = []
+    sirup = [dict(r) for r in conn.execute(
+        f"SELECT * FROM sirup_paket WHERE tahun=? AND id_satker IN ({','.join('?' * len(ids))}) ORDER BY kode_rup", (tahun, *ids))]
+    aktif = {r["kode_rup"]: r for r in sirup if r["is_active"]}
+    semua = {r["kode_rup"]: r for r in sirup}
+
+    def pengganti(kode):
+        for _ in range(5):
+            r = semua.get(kode)
+            if r is None:
+                return None
+            if r["is_active"]:
+                return kode
+            kode = r["kode_rup_pengganti"]
+            if not kode:
+                return None
+        return None
+
+    klaim = {}                                              # kode RUP SiRUP -> [(paket SPSE, cara)]
+    sisa = []
+    for p in milik:                                         # tahap 1-2: kode RUP
+        cocok = []
+        for r in p["rup"]:
+            kode = r["kode_rup"]
+            if kode in aktif:
+                cocok.append((kode, "Kode RUP"))
+            elif kode in semua and pengganti(kode):
+                cocok.append((pengganti(kode), "Kode RUP (RUP sudah direvisi)"))
+        if cocok:
+            for kode, cara in dict.fromkeys(cocok):
+                klaim.setdefault(kode, []).append((p, cara))
+        else:
+            sisa.append(p)
+    tanpa_pasangan = []
+    for p in sisa:                                          # tahap 3: nama + instansi, hanya RUP yang belum terklaim
+        nama = {norm_nama(p["nama_paket"])} | {norm_nama(r["nama_paket"]) for r in p["rup"]}
+        kandidat = [k for k, r in aktif.items() if k not in klaim and norm_nama(r["nama_paket"]) in nama]
+        if kandidat:
+            terbaik = min(kandidat, key=lambda k: abs((aktif[k]["pagu"] or 0) - (p["pagu"] or 0)))
+            klaim.setdefault(terbaik, []).append((p, "Nama paket + instansi (RUP berubah)"))
+        else:
+            tanpa_pasangan.append(p)
+    pagu_grup = {}                                          # paket SPSE -> jumlah pagu RUP SiRUP yang berpasangan
+    for kode, lst in klaim.items():
+        for p, _ in lst:
+            pagu_grup.setdefault(p["kode_paket"], []).append(kode)
+
+    def bentuk(p, cara, r):
+        return _baris_spse(conn, lpse, jenis, p, cara, sekarang, pagu_grup.get(p["kode_paket"], []), aktif,
+                           len(klaim.get(r["kode_rup"], [])) if r else 1)
+
+    for kode, r in aktif.items():
+        dasar = {"tahun": tahun, "kode_rup": kode, "nama_sirup": r["nama_paket"], "pagu_sirup": r["pagu"], "metode_sirup": r["metode_pemilihan"],
+                 "jenis_sirup": r["jenis"], "link_sirup": r["link"], "sumber_dana": r["sumber_dana"], "kategori": _kategori_sirup(r)}
+        if kode in klaim:
+            # beberapa paket SPSE untuk satu RUP (mis. pengumuman ulang): utamakan yang tidak dibatalkan, lalu yang terbaru
+            p, cara = sorted(klaim[kode], key=lambda x: ((x[0]["tahapan"] or "").lower().find("batal") >= 0, -int(x[0]["kode_paket"])))[0]
+            baris.append({**dasar, **bentuk(p, cara, r)})
+        else:
+            kat = dasar["kategori"]
+            st = {"Swakelola": "Swakelola (tidak di SPSE)", "E-Katalog": "E-Katalog (tidak di SPSE)", "Dikecualikan": "Dikecualikan",
+                  "Tender/Seleksi": "Tender/Seleksi (belum diambil)"}.get(
+                kat, "Belum dapat dipastikan (detail SPSE belum lengkap)" if tanpa_detail else "Belum ada di SPSE")
+            baris.append({**dasar, "status": st, "kecocokan": None, "kode_nontender": None})
+    luar = luar or {}
+    for p in tanpa_pasangan:
+        recs = [luar[r["kode_rup"]] for r in p["rup"] if r["kode_rup"] in luar]
+        ada = [r for r in recs if r["ditemukan"]]
+        milik_satker = [r for r in ada if norm_satker(r["satker_nama"]) == norm_satker(nama_satker)]
+        spse_bag = _baris_spse(conn, lpse, jenis, p, None, sekarang)
+        if milik_satker:                                    # RUP-nya ADA di SiRUP (dicek lewat kode), hanya tidak tampil di daftar satker
+            pagu_ref = sum(r["pagu"] or 0 for r in milik_satker)
+            spse_bag.update(kecocokan="Kode RUP (ada di SiRUP, tidak tampil di daftar satker)", jumlah_rup_gabungan=len(milik_satker),
+                            pagu_sirup_gabungan=pagu_ref,
+                            pagu_sama=None if p["pagu"] is None else abs(pagu_ref - p["pagu"]) < 1,
+                            selisih_pagu=None if p["pagu"] is None else p["pagu"] - pagu_ref)
+            r0 = milik_satker[0]
+            baris.append({"tahun": tahun, "kode_rup": r0["kode_rup"], "nama_sirup": r0["nama_paket"], "pagu_sirup": r0["pagu"],
+                          "metode_sirup": r0["metode_pemilihan"], "jenis_sirup": "penyedia", "link_sirup": r0["link"], "sumber_dana": None,
+                          "kategori": _kategori_sirup({"jenis": "penyedia", "metode_pemilihan": r0["metode_pemilihan"]}), "di_daftar": False,
+                          **spse_bag})
+            continue
+        if ada:
+            status = "RUP di SiRUP milik satker lain"
+        elif recs and all(not r["ditemukan"] for r in recs):
+            status = "RUP tidak ada di SiRUP"
+        else:
+            status = "Tidak ada di daftar SiRUP"
+        baris.append({"tahun": tahun, "kode_rup": None, "nama_sirup": None, "pagu_sirup": None, "kategori": "Non-Tender", "metode_sirup": None,
+                      **spse_bag, "status": status,
+                      **({"kecocokan": f"RUP {ada[0]['kode_rup']} milik {ada[0]['satker_nama']}"} if ada else {})})
+    for b in baris:
+        b["satker"] = nama_satker
+    return baris
+
+
+def hitung(conn, lpse, jenis, tahun_list, peta_sirup, satker=None, sekarang=None):
+    """Return {baris, ringkas, peringatan, satker_daftar}.
+    `peta_sirup` = {nama satker: [idSatker SiRUP, ...]} untuk satker yang data SiRUP-nya ada di database (nama dibandingkan setelah
+    dinormalkan). `satker` = nama satu satker, atau None/'semua' = semua satker yang ada di SPSE maupun SiRUP.
+    Satker yang ada di SPSE tetapi belum punya data SiRUP tetap ditampilkan (status 'SiRUP satker ini belum diambil'),
+    bukan dianggap 'tidak ada di SiRUP'."""
     sekarang = sekarang or datetime.now().strftime("%Y-%m-%dT%H:%M")
-    ids = [id_satker] if isinstance(id_satker, int) else list(id_satker)
-    sasaran = {norm_satker(satker_nama), *(norm_satker(a) for a in satker_alias)}
-    baris, peringatan = [], []
+    peta = {norm_satker(n): (n, list(ids)) for n, ids in peta_sirup.items()}
+    pilih = None if satker in (None, "", "semua") else norm_satker(satker)
+    luar = {r["kode_rup"]: dict(r) for r in conn.execute("SELECT * FROM sirup_luar_daftar WHERE error IS NULL")} \
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name='sirup_luar_daftar'").fetchone() else {}
+    baris, peringatan, ada_spse = [], [], {}
+    tanpa_sirup = set()
     for tahun in tahun_list:
-        sirup = [dict(r) for r in conn.execute(
-            f"SELECT * FROM sirup_paket WHERE tahun=? AND id_satker IN ({','.join('?' * len(ids))}) ORDER BY kode_rup", (tahun, *ids))]
-        aktif = {r["kode_rup"]: r for r in sirup if r["is_active"]}
-        semua = {r["kode_rup"]: r for r in sirup}
-
-        def pengganti(kode):
-            for _ in range(5):
-                r = semua.get(kode)
-                if r is None:
-                    return None
-                if r["is_active"]:
-                    return kode
-                kode = r["kode_rup_pengganti"]
-                if not kode:
-                    return None
-            return None
-
         spse = _paket_spse(conn, lpse, jenis, tahun)
         tanpa_detail = [p for p in spse if not p["ada_detail"]]
         if tanpa_detail:
-            peringatan.append(f"Tahun {tahun}: {len(tanpa_detail)} paket SPSE belum diambil detailnya, jadi instansinya belum diketahui "
+            peringatan.append(f"Tahun {tahun}: {len(tanpa_detail)} paket SPSE belum diambil detailnya, jadi satkernya belum diketahui "
                               f"dan belum ikut dibandingkan. Jalankan Ambil Data + Detail di halaman SPSE.")
-        milik = [p for p in spse if p["ada_detail"] and norm_satker(p["satker"]) in sasaran]
-        klaim = {}                                              # kode RUP SiRUP -> [(paket SPSE, cara)]
-        sisa = []
-        for p in milik:                                         # tahap 1-2: kode RUP
-            cocok = []
-            for r in p["rup"]:
-                kode = r["kode_rup"]
-                if kode in aktif:
-                    cocok.append((kode, "Kode RUP"))
-                elif kode in semua and pengganti(kode):
-                    cocok.append((pengganti(kode), "Kode RUP (RUP sudah direvisi)"))
-            if cocok:
-                for kode, cara in dict.fromkeys(cocok):
-                    klaim.setdefault(kode, []).append((p, cara))
+        grup = {}
+        for p in spse:
+            if p["ada_detail"]:
+                grup.setdefault(norm_satker(p["satker"]), (p["satker"], []))[1].append(p)
+        for k, (nama, lst) in grup.items():
+            ada_spse[k] = ada_spse.get(k, (nama, 0))[0], ada_spse.get(k, (nama, 0))[1] + len(lst)
+        for k in sorted(set(grup) | set(peta)):
+            if pilih is not None and k != pilih:
+                continue
+            nama = grup[k][0] if k in grup else peta[k][0]
+            milik = grup[k][1] if k in grup else []
+            if k in peta:
+                baris += _bandingkan(conn, lpse, jenis, tahun, peta[k][1], milik, tanpa_detail, sekarang, nama, luar)
             else:
-                sisa.append(p)
-        tanpa_pasangan = []
-        for p in sisa:                                          # tahap 3: nama + instansi, hanya RUP yang belum terklaim
-            nama = {norm_nama(p["nama_paket"])} | {norm_nama(r["nama_paket"]) for r in p["rup"]}
-            kandidat = [k for k, r in aktif.items() if k not in klaim and norm_nama(r["nama_paket"]) in nama]
-            if kandidat:
-                terbaik = min(kandidat, key=lambda k: abs((aktif[k]["pagu"] or 0) - (p["pagu"] or 0)))
-                klaim.setdefault(terbaik, []).append((p, "Nama paket + instansi (RUP berubah)"))
-            else:
-                tanpa_pasangan.append(p)
-        pagu_grup = {}                                          # paket SPSE -> jumlah pagu RUP SiRUP yang berpasangan
-        for kode, lst in klaim.items():
-            for p, _ in lst:
-                pagu_grup.setdefault(p["kode_paket"], []).append(kode)
-
-        def bentuk(p, cara, r):
-            jad = _jadwal_paket(conn, lpse, jenis, p["kode_paket"])
-            status, acuan = _tayang(jad, sekarang)
-            kode_grup = pagu_grup.get(p["kode_paket"], [])
-            pagu_ref = sum((aktif[k]["pagu"] or 0) for k in kode_grup) if kode_grup else None
-            awal = None
-            if acuan:
-                asli = [x["mulai_asli_iso"] for x in acuan["riwayat"] if x.get("mulai_asli_iso")]
-                awal = min(asli) if asli else None
-            return {
-                "kode_nontender": p["kode_paket"], "nama_spse": p["nama_paket"], "kode_rup_spse": ", ".join(x["kode_rup"] for x in p["rup"]),
-                "tahapan": p["tahapan"], "metode_spse": p["metode"] or p["metode_daftar"], "link_spse": p["link"], "satker_spse": p["satker"],
-                "kecocokan": cara, "status": status, "pagu_spse": p["pagu"], "hps": p["hps"],
-                "harga_penawaran": p["harga_penawaran"], "harga_terkoreksi": p["harga_terkoreksi"], "hasil_negosiasi": p["hasil_negosiasi"],
-                "nilai_kontrak": p["nilai_kontrak"], "pemenang": p["pemenang_nama"], "pemenang_terisi": p["pemenang_terisi"],
-                "kontrak_terisi": p["kontrak_terisi"], "lengkap": p["lengkap"],
-                "upload_mulai": acuan["mulai"] if acuan else None, "upload_sampai": acuan["sampai"] if acuan else None,
-                "upload_mulai_awal": awal, "jadwal_diubah": sum(t["jumlah_perubahan"] for t in jad), "jadwal": jad,
-                "jumlah_rup_gabungan": len(kode_grup), "pagu_sirup_gabungan": pagu_ref,
-                "pagu_sama": (None if p["pagu"] is None or pagu_ref is None else abs(pagu_ref - p["pagu"]) < 1),
-                "selisih_pagu": (None if p["pagu"] is None or pagu_ref is None else p["pagu"] - pagu_ref),
-                "jumlah_paket_spse": len(klaim.get(r["kode_rup"], [])) if r else 1,
-            }
-
-        for kode, r in aktif.items():
-            dasar = {"tahun": tahun, "kode_rup": kode, "nama_sirup": r["nama_paket"], "pagu_sirup": r["pagu"], "metode_sirup": r["metode_pemilihan"],
-                     "jenis_sirup": r["jenis"], "link_sirup": r["link"], "sumber_dana": r["sumber_dana"], "kategori": _kategori_sirup(r)}
-            if kode in klaim:
-                # beberapa paket SPSE untuk satu RUP (mis. pengumuman ulang): utamakan yang tidak dibatalkan, lalu yang terbaru
-                p, cara = sorted(klaim[kode], key=lambda x: ((x[0]["tahapan"] or "").lower().find("batal") >= 0, -int(x[0]["kode_paket"])))[0]
-                baris.append({**dasar, **bentuk(p, cara, r)})
-            else:
-                kat = dasar["kategori"]
-                st = {"Swakelola": "Swakelola (tidak di SPSE)", "E-Katalog": "E-Katalog (tidak di SPSE)", "Dikecualikan": "Dikecualikan",
-                      "Tender/Seleksi": "Tender/Seleksi (belum diambil)"}.get(
-                    kat, "Belum dapat dipastikan (detail SPSE belum lengkap)" if tanpa_detail else "Belum ada di SPSE")
-                baris.append({**dasar, "status": st, "kecocokan": None, "kode_nontender": None})
-        for p in tanpa_pasangan:
-            baris.append({"tahun": tahun, "kode_rup": None, "nama_sirup": None, "pagu_sirup": None, "kategori": "Non-Tender", "metode_sirup": None,
-                          **bentuk(p, None, None), "status": "Tidak ada di SiRUP"})
-    return {"baris": baris, "ringkas": ringkas(baris), "peringatan": peringatan}
+                tanpa_sirup.add(nama)
+                for p in milik:
+                    baris.append({"tahun": tahun, "kode_rup": None, "nama_sirup": None, "pagu_sirup": None, "kategori": "Non-Tender",
+                                  "metode_sirup": None, "satker": nama, **_baris_spse(conn, lpse, jenis, p, None, sekarang),
+                                  "status": "SiRUP satker ini belum diambil"})
+    if tanpa_sirup and pilih is None:
+        peringatan.append(f"{len(tanpa_sirup)} satker punya paket di SPSE tetapi data SiRUP-nya belum diambil, jadi hanya ditampilkan dari sisi SPSE.")
+    daftar = [{"nama": n, "paket_spse": ada_spse.get(k, (n, 0))[1], "ada_sirup": k in peta} for k, (n, _) in sorted({**{k: (v[0], 0) for k, v in peta.items()}, **{k: (v[0], 0) for k, v in ada_spse.items()}}.items())]
+    return {"baris": baris, "ringkas": ringkas(baris), "peringatan": peringatan, "satker_daftar": daftar}
 
 
 def ringkas(baris):

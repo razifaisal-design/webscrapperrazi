@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perbandingan SiRUP dan SPSE</title>
+<link rel="stylesheet" href="/gaya.css">
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Halaman"><a href="/">SiRUP</a><a href="/spse">SPSE (LPSE)</a><a class="aktif" href="/banding">Perbandingan SiRUP ↔ SPSE</a></nav>
+  <header>
+    <div>
+      <h1>Perbandingan SiRUP ↔ SPSE Non-Tender</h1>
+      <div class="sub" id="sub">Memuat…</div>
+    </div>
+    <div class="ctl">
+      <span class="live" id="live"><i class="dot"></i><span id="liveTeks">…</span></span>
+      <label class="sub" for="satker">Satker / Dinas</label>
+      <select id="satker" aria-label="Satker atau dinas" style="max-width:300px"></select>
+      <label class="sub" for="tahun">Tahun</label>
+      <select id="tahun" aria-label="Tahun"></select>
+      <label class="sub" for="interval">Auto-refresh</label>
+      <select id="interval" aria-label="Interval auto-refresh">
+        <option value="0">Mati</option><option value="5">5 detik</option><option value="30">30 detik</option><option value="60">1 menit</option><option value="300">5 menit</option>
+      </select>
+      <span class="sub" id="jobTeks"></span>
+      <button class="btn" id="bukaPeriksa">Periksa RUP ke SiRUP…</button>
+      <a class="btn" id="unduhExcel" href="#" style="text-decoration:none">Unduh Excel</a>
+      <button class="btn" id="muat">Muat ulang</button>
+      <button class="btn" id="unduh">Unduh CSV</button>
+    </div>
+  </header>
+  <section class="ambil" id="periksa" hidden aria-label="Periksa RUP langsung ke SiRUP">
+    <div><b>Periksa RUP langsung ke SiRUP</b> <span class="sub">Paket yang tayang di SPSE seharusnya punya RUP di SiRUP. Untuk paket yang kode RUP-nya tidak ada di <i>daftar</i> SiRUP satker, halaman detail RUP dibuka langsung lewat kodenya (publik) untuk memastikan RUP-nya ada, satkernya sama, dan paginya sama.</span></div>
+    <div class="agrid" style="margin-top:10px">
+      <label>Jumlah koneksi<select id="p-koneksi"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select></label>
+      <label>Jeda tiap koneksi<select id="p-jeda"><option value="1">1 detik</option><option value="1.5" selected>1,5 detik</option><option value="2">2 detik</option><option value="3">3 detik</option></select></label>
+      <label style="justify-content:flex-end"><span style="display:flex;gap:6px;align-items:center;color:var(--text)"><input type="checkbox" id="p-ulang"> Periksa ulang yang sudah pernah dicek</span></label>
+    </div>
+    <div class="aksi">
+      <button class="btn utama" id="a-mulai">Periksa RUP ke SiRUP</button>
+      <button class="btn bahaya" id="a-henti" disabled>Hentikan</button>
+      <span class="sub">Berlaku untuk tahun dan satker yang sedang dipilih di atas.</span>
+    </div>
+    <div id="a-status"></div>
+  </section>
+  <div class="note err" id="basi" hidden><b>Kode aplikasi sudah diperbarui</b> sejak dashboard ini dijalankan. Tutup jendela Terminal "Buka Dashboard", lalu klik <b>Buka Dashboard.command</b> lagi.</div>
+  <div id="catatan"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="cats" id="cats"></div>
+  <p class="gabung" id="aturan"></p>
+  <div class="panel" style="border-radius:12px">
+    <div class="tools"><input id="cari" type="search" aria-label="Cari" placeholder="Cari satker, kode RUP, kode non tender, nama paket, pemenang…"><span id="filter"></span><span class="sub" id="hitung"></span></div>
+    <div id="ringkasan"></div>
+    <div class="scroll"><table id="tabel"></table></div>
+    <div id="halaman"></div>
+  </div>
+</div>
+<script src="/bersama.js"></script>
+<script>
+let D = null, tahun = baca("banding_tahun", ""), satker = baca("banding_satker", ""), interval = parseInt(baca("banding_interval", "60"), 10), timer = null, sedang = false, teksTerakhir = "";
+const F = { status: "Semua", kecocokan: "Semua", pagu: "Semua", jadwal: "Semua", kategori: "Semua" };
+const urut = { k: "kode_rup", asc: true };
+const buka = new Set(), H = { hal: 0, per: 50 };
+const kunciBaris = (b) => `${b.tahun}|${b.kode_rup || ""}|${b.kode_nontender || ""}`;
+const WARNA_STATUS = { "Sudah tayang": "tayang", "Belum tayang": "belum", "Belum ada di SPSE": "gagal", "Tidak ada di daftar SiRUP": "gagal", "Jadwal belum diambil": "info", "SiRUP satker ini belum diambil": "info", "RUP tidak ada di SiRUP": "gagal", "RUP di SiRUP milik satker lain": "belum", "Tidak ada di daftar SiRUP": "belum" };
+const tagStatus = (s) => `<span class="tag ${WARNA_STATUS[s] || (s.startsWith("Belum dapat") ? "belum" : "")}">${esc(s)}</span>`;
+
+async function muat() {
+  if (sedang) return;
+  sedang = true; status("", "memuat…");
+  try {
+    D = await ambilJSON("/api/banding?" + new URLSearchParams({ ...(tahun ? { tahun } : {}), satker }));
+    if (!tahun) tahun = String(D.tahun_dipilih);
+    const t = JSON.stringify([D.ringkas, D.baris.length, D.peringatan, D.satker_daftar]);
+    if (t !== teksTerakhir) { teksTerakhir = t; gambar(); }
+    status("on", `diperbarui ${new Date().toLocaleTimeString("id-ID")}`);
+  } catch (e) { status("err", e.message); $("sub").textContent = "Gagal memuat: " + e.message; }
+  finally { sedang = false; }
+}
+function status(k, teks) { $("live").className = "live " + k; $("liveTeks").textContent = teks; }
+function aturTimer() { clearInterval(timer); if (interval > 0) timer = setInterval(() => { if (!document.hidden) muat(); }, interval * 1000); }
+$("interval").value = String(interval); $("interval").addEventListener("change", () => { interval = parseInt($("interval").value, 10); simpan("banding_interval", interval); aturTimer(); });
+$("muat").addEventListener("click", () => { teksTerakhir = ""; muat(); });
+$("satker").addEventListener("change", () => { satker = $("satker").value; simpan("banding_satker", satker); teksTerakhir = ""; buka.clear(); H.hal = 0; F.status = "Semua"; muat(); });
+$("tahun").addEventListener("change", () => { tahun = $("tahun").value; simpan("banding_tahun", tahun); teksTerakhir = ""; buka.clear(); H.hal = 0; F.status = "Semua"; muat(); });
+
+function gambar() {
+  const r = D.ringkas, th = D.tahun_dipilih === "semua" ? "semua tahun" : `tahun ${D.tahun_dipilih}`;
+  $("tahun").innerHTML = ["semua", ...D.tahun.slice().reverse().map(String)].map((y) => `<option value="${y}" ${y === String(tahun) ? "selected" : ""}>${y === "semua" ? "Semua tahun" : y}</option>`).join("");
+  const daftar = D.satker_daftar.slice();
+  if (satker && !daftar.some((e) => e.nama === satker)) daftar.unshift({ nama: satker, paket_spse: 0, ada_sirup: false });
+  $("satker").innerHTML = `<option value="">Semua satker / dinas</option>` + daftar.map((e) => `<option value="${esc(e.nama)}" ${e.nama === satker ? "selected" : ""}>${esc(e.nama)} — ${rp.format(e.paket_spse)} paket SPSE${e.ada_sirup ? "" : ", tanpa data SiRUP"}</option>`).join("");
+  $("sub").textContent = `${satker || "Semua satker"} · LPSE ${D.lpse} · ${th} · ${rp.format(r.total)} baris`;
+  $("unduhExcel").href = "/api/banding/excel?" + new URLSearchParams({ tahun, satker });
+  const blmCek = (r.per_status["Tidak ada di daftar SiRUP"] || {}).jumlah || 0, luarDaftar = D.baris.filter((b) => b.di_daftar === false).length;
+  $("catatan").innerHTML = D.peringatan.map((p) => `<div class="note warn">${esc(p)}</div>`).join("") +
+    (blmCek ? `<div class="note warn"><b>${rp.format(blmCek)} paket SPSE</b> kode RUP-nya tidak ada di daftar SiRUP satker. Klik <b>Periksa RUP ke SiRUP…</b> untuk membuka RUP-nya langsung lewat kode dan memastikan ada atau tidaknya di SiRUP.</div>` : "") +
+    (luarDaftar ? `<div class="note ok"><b>${rp.format(luarDaftar)} paket</b> RUP-nya terbukti ada di SiRUP (dicek lewat kode RUP) walau tidak tampil di daftar publik satker — ditandai pada kolom Nama paket.</div>` : "");
+  $("aturan").innerHTML = `<b>Sudah tayang</b> = tahap <i>Upload Dokumen Penawaran</i> (tahap pertama di jadwal SPSE) sudah dimulai dibandingkan waktu sekarang. Pasangan RUP ↔ paket SPSE dicari lewat <b>kode RUP</b>; bila RUP diubah setelah tayang, lewat <b>nama paket + instansi yang sama</b>.`;
+  const ps = r.per_status, urutanStatus = ["Sudah tayang", "Belum tayang", "Jadwal belum diambil", "Belum ada di SPSE", "Tidak ada di daftar SiRUP"];
+  const lain = Object.keys(ps).filter((s) => !urutanStatus.includes(s));
+  const warna = { "Sudah tayang": "var(--ok)", "Belum tayang": "var(--warn)", "Belum ada di SPSE": "var(--err)", "Tidak ada di daftar SiRUP": "var(--err)", "Jadwal belum diambil": "var(--accent)" };
+  $("cats").innerHTML = [...urutanStatus, ...lain].filter((s) => ps[s]).map((s) =>
+    `<button class="cat ${F.status === s ? "pilih" : ""}" data-status="${esc(s)}" style="--c:${warna[s] || "var(--lain)"}"><div class="l">${esc(s)}</div><div class="v">${rp.format(ps[s].jumlah)}</div><div class="s">pagu SiRUP ${ringkas(ps[s].pagu_sirup)}</div></button>`).join("");
+  const kpi = (l, v, s) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
+  $("kpis").innerHTML = kpi("Berpasangan RUP ↔ SPSE", rp.format(r.berpasangan), "paket Non-Tender yang ditemukan di kedua sisi") +
+    kpi("Pagu sama", rp.format(r.pagu_sama), `<span class="sama">pagu SiRUP = pagu SPSE</span>`) +
+    kpi("Pagu beda", rp.format(r.pagu_beda), `<span class="${r.pagu_beda ? "beda" : ""}">perlu dicek</span>`) +
+    kpi("Jadwal pernah diubah", rp.format(r.jadwal_diubah), "paket dengan perubahan jadwal tahap") +
+    kpi("Pemenang terisi", rp.format(r.pemenang_terisi), `Nilai kontrak terisi: ${rp.format(r.kontrak_terisi)}`);
+  filterUI(); isiTabel();
+}
+$("cats").addEventListener("click", (e) => { const b = e.target.closest("[data-status]"); if (!b) return; F.status = F.status === b.dataset.status ? "Semua" : b.dataset.status; H.hal = 0; gambar(); });
+
+function filterUI() {
+  const st = unik(D.baris.map((b) => b.status));
+  $("filter").innerHTML = sel("status", "Status", [["Semua", "Semua"], ...st.map((x) => [x, x])], F.status) +
+    sel("kecocokan", "Kecocokan", [["Semua", "Semua"], ...unik(D.baris.map((b) => b.kecocokan)).map((x) => [x, x])], F.kecocokan) +
+    sel("pagu", "Pagu", [["Semua", "Semua"], ["sama", "Sama"], ["beda", "Beda"]], F.pagu) +
+    sel("jadwal", "Jadwal", [["Semua", "Semua"], ["diubah", "Pernah diubah"]], F.jadwal) +
+    sel("kategori", "Metode SiRUP", [["Semua", "Semua"], ...unik(D.baris.map((b) => b.kategori)).map((x) => [x, x])], F.kategori);
+}
+$("filter").addEventListener("change", (e) => { const k = e.target.dataset.f; if (!k) return; F[k] = e.target.value; H.hal = 0; gambar(); });
+$("cari").addEventListener("input", () => { H.hal = 0; isiTabel(); });
+
+function tersaring() {
+  const q = $("cari").value.trim().toLowerCase();
+  return D.baris.filter((b) => (F.status === "Semua" || b.status === F.status) && (F.kecocokan === "Semua" || b.kecocokan === F.kecocokan) &&
+    (F.kategori === "Semua" || b.kategori === F.kategori) && (F.pagu === "Semua" || (F.pagu === "sama" ? b.pagu_sama === true : b.pagu_sama === false)) &&
+    (F.jadwal === "Semua" || (b.jadwal_diubah || 0) > 0) &&
+    (!q || `${b.satker || ""} ${b.kode_rup || ""} ${b.kode_nontender || ""} ${b.kode_rup_spse || ""} ${b.nama_sirup || ""} ${b.nama_spse || ""} ${b.pemenang || ""}`.toLowerCase().includes(q)));
+}
+const KOLOM = [["tahun", "Tahun"], ["satker", "Satker / Dinas"], ["kode_rup", "Kode RUP"], ["kode_nontender", "Kode non tender"], ["nama_sirup", "Nama paket"], ["status", "Status"], ["upload_mulai", "Upload mulai"],
+               ["upload_sampai", "Upload sampai"], ["jadwal_diubah", "Jadwal diubah", "num"], ["pagu_sirup", "Pagu SiRUP", "num"], ["pagu_spse", "Pagu SPSE", "num"], ["pagu_sama", "Pagu"],
+               ["hps", "HPS", "num"], ["harga_penawaran", "Harga penawaran", "num"], ["hasil_negosiasi", "Hasil negosiasi", "num"], ["nilai_kontrak", "Nilai kontrak", "num"]];
+function sel_(b, k) {
+  switch (k) {
+    case "kode_rup": return b.kode_rup ? (b.link_sirup ? `<a class="mono" href="${esc(b.link_sirup)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(b.kode_rup)}</a>` : `<span class="mono">${esc(b.kode_rup)}</span>`) : "–";
+    case "kode_nontender": return b.kode_nontender ? `<a class="mono" href="${esc(b.link_spse)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(b.kode_nontender)}</a>` : "–";
+    case "nama_sirup": return esc(b.nama_sirup || b.nama_spse) + (b.nama_spse && b.nama_sirup && b.nama_spse !== b.nama_sirup ? `<div class="sub">SPSE: ${esc(b.nama_spse)}</div>` : "") +
+      (b.kecocokan && b.kecocokan !== "Kode RUP" ? `<div><span class="tag info">${esc(b.kecocokan)}</span>${b.kode_rup_spse ? ` <span class="sub">RUP di SPSE: ${esc(b.kode_rup_spse)}</span>` : ""}</div>` : "");
+    case "status": return tagStatus(b.status) + (b.tahapan ? `<div class="sub">${esc(b.tahapan)}</div>` : "");
+    case "upload_mulai": case "upload_sampai": { const awal = b[k + "_awal"]; return b[k] ? tgl(b[k]) + (awal && awal !== b[k] ? `<div class="sub">semula ${tgl(awal)}</div>` : "") : "–"; }
+    case "jadwal_diubah": return b.kode_nontender && b.lengkap ? (b.jadwal_diubah ? `<span class="tag peringatan">${b.jadwal_diubah}×</span>` : "0") : "–";
+    case "pagu_sirup": case "pagu_spse": return fmt(b[k]) + (k === "pagu_spse" && b.jumlah_rup_gabungan > 1 ? `<div class="sub">gabungan ${b.jumlah_rup_gabungan} RUP</div>` : "");
+    case "pagu_sama": return b.pagu_sama === null || b.pagu_sama === undefined ? "–" : b.pagu_sama ? `<span class="sama">✔ sama</span>` : `<span class="beda">≠ ${selisihTag(b.selisih_pagu)}</span>`;
+    case "hps": case "harga_penawaran": case "hasil_negosiasi": return b.kode_nontender ? (b.lengkap || k === "hps" ? fmt(b[k]) : "–") : "–";
+    case "nilai_kontrak": return b.kode_nontender && b.lengkap ? (b.kontrak_terisi ? fmt(b.nilai_kontrak) : `<span class="tag belum">Belum</span>`) : "–";
+    default: return esc(b[k] ?? "");
+  }
+}
+function isiTabel() {
+  const rows = tersaring().sort((a, b) => { const x = a[urut.k] ?? "", y = b[urut.k] ?? ""; const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "id", { numeric: true }); return urut.asc ? c : -c; });
+  const hm = Math.max(1, Math.ceil(rows.length / H.per)); H.hal = Math.min(H.hal, hm - 1);
+  const potong = rows.slice(H.hal * H.per, H.hal * H.per + H.per);
+  $("hitung").textContent = `${rp.format(rows.length)} dari ${rp.format(D.baris.length)} baris`;
+  $("ringkasan").innerHTML = `<div class="ringkasan"><b>${rp.format(rows.length)}</b> baris · pagu SiRUP <b>${fmt(rows.reduce((s, b) => s + (b.pagu_sirup || 0), 0))}</b> · klik baris untuk jadwal tiap tahap beserta perubahannya.</div>`;
+  if (!D.baris.length) { $("tabel").innerHTML = `<tbody><tr><td class="kosong">Belum ada data untuk dibandingkan. Ambil data SiRUP di halaman SiRUP dan data SPSE di halaman SPSE.</td></tr></tbody>`; $("halaman").innerHTML = ""; return; }
+  const kepala = KOLOM.map(([kk, l, c]) => `<th class="s ${c || ""}" data-k="${kk}">${l}${urut.k === kk ? (urut.asc ? " ▲" : " ▼") : ""}</th>`).join("");
+  const baris = potong.map((b) => {
+    const kb = kunciBaris(b);
+    return `<tr class="grup" data-kb="${esc(kb)}">${KOLOM.map(([kk, , c]) => `<td class="${c || ""}">${sel_(b, kk)}</td>`).join("")}</tr>` +
+      (buka.has(kb) ? `<tr class="rinci"><td colspan="${KOLOM.length}">${rincian(b)}</td></tr>` : "");
+  }).join("");
+  $("tabel").innerHTML = `<thead><tr>${kepala}</tr></thead><tbody>${baris || `<tr><td colspan="${KOLOM.length}" class="kosong">Tidak ada baris untuk filter ini.</td></tr>`}</tbody>`;
+  $("halaman").innerHTML = `<div class="halaman"><span class="sub">Halaman ${H.hal + 1} dari ${hm}</span><span style="display:flex;gap:8px;align-items:center">
+    <button class="btn" data-hal="-1" ${H.hal === 0 ? "disabled" : ""}>‹ Sebelumnya</button><button class="btn" data-hal="1" ${H.hal >= hm - 1 ? "disabled" : ""}>Berikutnya ›</button>
+    <label class="flab">Per halaman<select id="perhal">${[25, 50, 100, 250].map((n) => `<option ${n === H.per ? "selected" : ""}>${n}</option>`).join("")}</select></label></span></div>`;
+}
+function rincian(b) {
+  const dl = (l, v) => `<div><dt>${l}</dt><dd>${v || "–"}</dd></div>`;
+  let h = `<dl class="detail">${dl("Nama paket SiRUP", esc(b.nama_sirup))}${dl("Nama paket SPSE", esc(b.nama_spse))}${dl("Metode SiRUP", esc(b.metode_sirup))}${dl("Metode SPSE", esc(b.metode_spse))}` +
+    `${dl("Kode RUP SiRUP", esc(b.kode_rup))}${dl("Kode RUP di SPSE", esc(b.kode_rup_spse))}${dl("Instansi di SPSE", esc(b.satker_spse))}${dl("Pemenang", esc(b.pemenang))}` +
+    `${dl("Harga terkoreksi", b.harga_terkoreksi != null ? fmt(b.harga_terkoreksi) : "")}${dl("Pagu SiRUP (gabungan)", b.pagu_sirup_gabungan != null ? fmt(b.pagu_sirup_gabungan) : "")}</dl>`;
+  if (!b.jadwal || !b.jadwal.length) return h + `<div class="sub" style="margin-top:8px">${b.kode_nontender ? "Jadwal belum diambil untuk paket ini." : "Belum ada paket di SPSE."}</div>`;
+  return h + `<table class="jadwal-rinci"><thead><tr><th>No</th><th>Tahap</th><th>Mulai</th><th>Sampai</th><th>Perubahan</th></tr></thead><tbody>` +
+    b.jadwal.map((t) => `<tr><td>${t.no}</td><td>${esc(t.tahap)}</td><td>${tgl(t.mulai) || esc(t.mulai_teks)}</td><td>${tgl(t.sampai) || esc(t.sampai_teks)}</td>
+      <td>${t.jumlah_perubahan ? `<span class="tag peringatan">${t.jumlah_perubahan}× diubah</span>` + (t.riwayat || []).map((r) => `<div class="sub">${esc(r.tanggal_edit)}: semula ${esc(r.mulai_asli)} – ${esc(r.sampai_asli)}. ${esc(r.keterangan)}</div>`).join("") : "Tidak ada"}</td></tr>`).join("") + `</tbody></table>`;
+}
+$("tabel").addEventListener("click", (e) => {
+  const th = e.target.closest("th.s");
+  if (th) { const k = th.dataset.k; urut.asc = urut.k === k ? !urut.asc : true; urut.k = k; return isiTabel(); }
+  const tr = e.target.closest("tr.grup"); if (!tr) return;
+  const kb = tr.dataset.kb; buka.has(kb) ? buka.delete(kb) : buka.add(kb); isiTabel();
+});
+$("halaman").addEventListener("click", (e) => { const b = e.target.closest("[data-hal]"); if (b) { H.hal += parseInt(b.dataset.hal, 10); isiTabel(); } });
+$("halaman").addEventListener("change", (e) => { if (e.target.id === "perhal") { H.per = parseInt(e.target.value, 10); H.hal = 0; isiTabel(); } });
+$("unduh").addEventListener("click", () => {
+  if (!D) return;
+  const kol = [["tahun", "Tahun"], ["satker", "Satker / Dinas"], ["kode_rup", "Kode RUP"], ["kode_nontender", "Kode non tender"], ["kode_rup_spse", "Kode RUP di SPSE"], ["nama_sirup", "Nama paket SiRUP"], ["nama_spse", "Nama paket SPSE"],
+    ["status", "Status"], ["kecocokan", "Kecocokan"], ["tahapan", "Tahapan SPSE"], ["upload_mulai", "Upload mulai"], ["upload_sampai", "Upload sampai"], ["upload_mulai_awal", "Upload mulai awal"], ["upload_sampai_awal", "Upload sampai awal"],
+    ["jadwal_diubah", "Perubahan jadwal"], ["pagu_sirup", "Pagu SiRUP"], ["pagu_spse", "Pagu SPSE"], ["pagu_sama", "Pagu sama"], ["selisih_pagu", "Selisih pagu"], ["hps", "HPS"],
+    ["harga_penawaran", "Harga penawaran"], ["harga_terkoreksi", "Harga terkoreksi"], ["hasil_negosiasi", "Hasil negosiasi"], ["nilai_kontrak", "Nilai kontrak"], ["pemenang", "Pemenang"]];
+  const c = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const baris = [kol.map(([, l]) => c(l)).join(",")].concat(tersaring().map((b) => kol.map(([k]) => c(b[k])).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+  a.download = `banding_sirup_spse_${tahun}.csv`; a.click(); URL.revokeObjectURL(a.href);
+});
+/* ---------- periksa RUP langsung ke SiRUP ---------- */
+$("bukaPeriksa").addEventListener("click", () => { const p = $("periksa"); p.hidden = !p.hidden; });
+pasangTugas({
+  awalan: "banding", mulai: "a-mulai", henti: "a-henti",
+  badan: () => ({ jenis: "banding_periksa", tahun: tahun === "semua" ? "semua" : parseInt(tahun, 10), koneksi: parseInt($("p-koneksi").value, 10), jeda: parseFloat($("p-jeda").value),
+                  semua: $("p-ulang").checked, satker: satker || "__semua" }),
+  render: () => {},
+  selesai: async () => { teksTerakhir = ""; await muat(); },
+});
+aturTimer(); muat();
+</script>
+</body>
+</html>

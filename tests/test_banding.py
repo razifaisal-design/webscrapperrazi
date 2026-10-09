@@ -34,7 +34,7 @@ class TestBanding(unittest.TestCase):
                            (kode, mulai, "2026-04-05T08:00", perubahan, json.dumps(riwayat or [])))
 
     def hitung(self, **kw):
-        return banding.hitung(self.c, "p", "nontender", [2026], 1, SATKER, sekarang=SEKARANG, **kw)
+        return banding.hitung(self.c, "p", "nontender", [2026], {SATKER: [1]}, sekarang=SEKARANG, **kw)
 
     def per_rup(self, hasil):
         return {b["kode_rup"]: b for b in hasil["baris"] if b["kode_rup"]}
@@ -65,7 +65,10 @@ class TestBanding(unittest.TestCase):
         self.spse("40", "Pengadaan Meja", ["77"], satker="DINAS LAIN")
         h = self.hitung()
         self.assertEqual(self.per_rup(h)["5"]["status"], "Belum ada di SPSE")
-        self.assertEqual(h["ringkas"]["per_status"].get("Tidak ada di SiRUP"), None)      # paket instansi lain bukan urusan
+        self.assertEqual(h["ringkas"]["per_status"].get("Tidak ada di daftar SiRUP"), None)      # tidak dicocokkan lintas satker
+        lain = [b for b in h["baris"] if b["satker"] == "DINAS LAIN"]                   # tampil dari sisi SPSE, bukan "tidak ada di SiRUP"
+        self.assertEqual([(b["kode_nontender"], b["status"]) for b in lain], [("40", "SiRUP satker ini belum diambil")])
+        self.assertTrue(any("belum diambil" in x for x in h["peringatan"]))
 
     def test_pagu_beda_dan_gabungan_beberapa_rup(self):
         self.rup("1", "Paket X", pagu=60); self.rup("2", "Paket X lanjutan", pagu=40); self.rup("3", "Paket Y", pagu=100)
@@ -77,9 +80,11 @@ class TestBanding(unittest.TestCase):
 
     def test_perubahan_jadwal_dan_jadwal_awal(self):
         self.rup("1", "Jalan A")
-        self.spse("10", "Jalan A", ["1"], perubahan=2, riwayat=[{"mulai_asli_iso": "2026-03-20T08:00", "sampai_asli_iso": "x", "keterangan": "k"}])
+        self.spse("10", "Jalan A", ["1"], perubahan=2, riwayat=[{"tanggal_edit_iso": "2026-03-25T10:00", "mulai_asli_iso": "2026-03-28T08:00", "sampai_asli_iso": "2026-04-02T08:00", "keterangan": "k2"},
+                                                                  {"tanggal_edit_iso": "2026-03-21T10:00", "mulai_asli_iso": "2026-03-20T08:00", "sampai_asli_iso": "2026-03-24T08:00", "keterangan": "k1"}])
         b = self.per_rup(self.hitung())["1"]
-        self.assertEqual((b["jadwal_diubah"], b["upload_mulai_awal"], b["upload_mulai"]), (2, "2026-03-20T08:00", "2026-04-01T08:00"))
+        self.assertEqual((b["jadwal_diubah"], b["upload_mulai_awal"], b["upload_sampai_awal"], b["upload_mulai"]),
+                         (2, "2026-03-20T08:00", "2026-03-24T08:00", "2026-04-01T08:00"))
 
     def test_kategori_non_spse(self):
         self.rup("1", "Katalog", metode="E-Purchasing"); self.rup("2", "Swa", metode="Swakelola", jenis="swakelola")
@@ -93,8 +98,28 @@ class TestBanding(unittest.TestCase):
         self.spse("80", "Belum Diambil", [], detail=False)
         h = self.hitung()
         self.assertEqual(self.per_rup(h)["1"]["status"], "Belum dapat dipastikan (detail SPSE belum lengkap)")
-        self.assertEqual([b["kode_nontender"] for b in h["baris"] if b["status"] == "Tidak ada di SiRUP"], ["70"])
+        self.assertEqual([b["kode_nontender"] for b in h["baris"] if b["status"] == "Tidak ada di daftar SiRUP"], ["70"])
         self.assertEqual(len(h["peringatan"]), 1)
+
+    def test_filter_satker_dan_daftar_satker(self):
+        self.rup("1", "Jalan A")
+        self.spse("10", "Jalan A", ["1"])
+        self.spse("40", "Paket Lain", ["77"], satker="DINAS LAIN")
+        h = self.hitung(satker="dinas  lain")                                         # nama dinormalkan
+        self.assertEqual({b["satker"] for b in h["baris"]}, {"DINAS LAIN"})
+        h = self.hitung(satker=SATKER)
+        self.assertEqual({b["satker"] for b in h["baris"]}, {SATKER})
+        self.assertEqual({d["nama"]: (d["paket_spse"], d["ada_sirup"]) for d in self.hitung()["satker_daftar"]},
+                         {SATKER: (1, True), "DINAS LAIN": (1, False)})
+
+    def test_dua_satker_dengan_sirup_dipisah(self):
+        self.c.execute("INSERT INTO sirup_paket(kode_rup,tahun,id_satker,jenis,nama_paket,pagu,metode_pemilihan,is_active,link) VALUES('9',2026,2,'penyedia','Paket Z',50,'Pengadaan Langsung',1,'l')")
+        self.rup("1", "Jalan A")
+        self.spse("10", "Jalan A", ["1"])
+        self.spse("90", "Paket Z", ["9"], satker="DINAS B", pagu=50)
+        h = banding.hitung(self.c, "p", "nontender", [2026], {SATKER: [1], "DINAS B": [2]}, sekarang=SEKARANG)
+        st = {b["kode_rup"]: (b["satker"], b["status"]) for b in h["baris"]}
+        self.assertEqual(st, {"1": (SATKER, "Sudah tayang"), "9": ("DINAS B", "Sudah tayang")})
 
     def test_jadwal_belum_diambil(self):
         self.rup("1", "Jalan A")

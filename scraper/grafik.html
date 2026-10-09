@@ -290,7 +290,7 @@ $("semuaCsv").addEventListener("click", () => unduh(csvTabel(Object.keys(TABEL))
 
 async function muat() {
   try {
-    const r = await fetch("/api/statistik", { cache: "no-store" }); const j = await r.json();
+    const r = await fetch("/api/statistik" + location.search, { cache: "no-store" }); const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     D = j; render();
   } catch (e) { $("isi").innerHTML = `<div class="kosong">Gagal memuat: ${esc(e.message)}</div>`; }
