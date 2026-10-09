@@ -121,6 +121,17 @@ class TestBandingLuarDaftar(unittest.TestCase):
         self.assertEqual(b["9777"]["status"], "RUP tidak ada di SiRUP")
         self.assertEqual(b["9888"]["status"], "Tidak ada di daftar SiRUP")                    # belum dicek langsung
 
+    def test_nama_sama_tapi_kode_rup_beda_didahulukan_kode(self):
+        # SPSE menyebut RUP 64482894 (di luar daftar, pagu 200 jt); di daftar ada RUP lain 'N' dengan nama persis sama tetapi pagu 50 jt
+        self.c.execute("INSERT INTO sirup_paket(kode_rup,tahun,id_satker,jenis,nama_paket,pagu,metode_pemilihan,is_active,link) VALUES('N',2026,1,'penyedia','Paket 64482894',50000000,'Pengadaan Langsung',1,'l')")
+        b = self.hitung()["964482894"]
+        self.assertEqual(b["kecocokan"], "Nama paket + instansi (RUP berubah)")             # sebelum dicek: hanya bisa lewat nama
+        self.luar("64482894", 1, nama="Paket 64482894")
+        b = self.hitung()["964482894"]
+        self.assertEqual((b["kode_rup"], b["di_daftar"], b["pagu_sama"]), ("64482894", False, True))   # setelah dicek: RUP aslinya yang dipakai
+        h = banding.hitung(self.c, "p", "nontender", [2026], {SATKER: [1]}, sekarang="2026-06-01T00:00")
+        self.assertEqual({b["kode_rup"]: b["status"] for b in h["baris"] if b["kode_rup"] == "N"}, {"N": "Belum ada di SPSE"})   # RUP 'N' tidak lagi salah dipasangkan
+
     def test_pagu_beda_terlihat_pada_rup_di_luar_daftar(self):
         self.luar("64482894", 1, pagu=150000000)
         b = self.hitung()["964482894"]

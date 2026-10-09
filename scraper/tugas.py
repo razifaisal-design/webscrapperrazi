@@ -635,7 +635,8 @@ def kode_rup_tak_berpasangan(conn, tahun_list=None, satker=None):
     h = banding.hitung(conn, lpse, "nontender", tahun_list, konfig.satker_sirup(), satker)
     kode = []
     for b in h["baris"]:
-        if b["status"] == "Tidak ada di daftar SiRUP":
+        # dicek: yang tak berpasangan, dan yang hanya cocok lewat NAMA (RUP yang disebut SPSE bisa saja RUP lain berbeda pagu)
+        if b["status"] == "Tidak ada di daftar SiRUP" or str(b.get("kecocokan") or "").startswith("Nama paket + instansi"):
             kode += [k.strip() for k in (b.get("kode_rup_spse") or "").split(",") if k.strip()]
     return list(dict.fromkeys(kode))
 
@@ -724,3 +725,72 @@ def run_periksa_rup(conn, kodes, koneksi=1, jeda=1.5, ulang=False, log=print, bu
         return 130
     log(f"Selesai. Ada di SiRUP: {hasil['ada']}, tidak ada: {hasil['tidak ada']}, galat: {hasil['galat']}.")
     return 4 if hasil["galat"] else 0
+
+
+# ======================= satu perintah: ambil semua data -> periksa RUP -> ekspor publik =======================
+def run_perbarui(conn, db_path, tahun=None, koneksi=1, jeda=1.5, usia_hari=7, rinci="semua", satker=None, periksa=True, ekspor=True,
+                 keluar=None, unggah=False, log=print, berhenti=None):
+    """Alur lengkap seperti yang dilakukan di dashboard, lalu salinan publik:
+      1. SiRUP: daftar RUP + detail untuk tiap satker terdaftar (atau hanya `satker`);
+      2. SPSE Non-Tender: daftar + detail (`rinci` = cakupan rincian: 'semua' | 'tidak' | nama satker);
+      3. periksa langsung ke SiRUP kode RUP yang tidak ada di daftar satker;
+      4. ekspor salinan publik (hanya baca) ke `keluar`;
+      5. (opsional, `unggah`) unggah salinan itu ke Cloudflare dengan Wrangler.
+    Diblokir (kode 2) menghentikan semuanya; kegagalan lain dicatat dan alur dilanjutkan. Return kode terburuk (0 bila semua baik)."""
+    cek_param(koneksi, jeda)
+    berhenti = berhenti or threading.Event()
+    hasil = {}
+
+    def catat(nama, kode):
+        hasil[nama] = kode
+        log(f"--- {nama}: {'OK' if kode == 0 else f'kode {kode}'}")
+        return kode in (2, 130)                      # diblokir / dihentikan: berhenti total
+
+    daftar = konfig.daftar_target()
+    if satker:
+        daftar = [t for t in daftar if direktori.norm(t["satker_nama"]) == direktori.norm(satker) or t["nama"] == satker]
+        if not daftar:
+            raise ValueError(f"satker '{satker}' belum terdaftar. Tambahkan lewat dashboard (Tambah satker / dinas).")
+    henti = False
+    for t in daftar:
+        if henti or berhenti.is_set():
+            break
+        _, target = konfig.muat_target(t["nama"], tahun)
+        log(f"=== SiRUP: {t['satker_nama']} (TA {target['tahun']}) ===")
+        henti = catat(f"SiRUP {t['satker_nama']}", run_semua(conn, target, koneksi=koneksi, jeda=jeda, usia_hari=usia_hari, log=log,
+                                                             berhenti=berhenti, db_path=db_path))
+    _, dasar = konfig.muat_target(None, tahun)
+    lpse = (dasar.get("spse") or {}).get("lpse", "pontianak")
+    if not henti and not berhenti.is_set():
+        cakupan = None if str(rinci).lower() == "semua" else "__tidak" if str(rinci).lower() == "tidak" else rinci
+        log(f"=== SPSE Non-Tender {lpse} (TA {dasar['tahun']}) ===")
+        henti = catat("SPSE Non-Tender", run_spse_semua(conn, "nontender", lpse, dasar["tahun"], jeda=jeda, usia_hari=usia_hari, satker=cakupan,
+                                                         koneksi=koneksi, log=log, berhenti=berhenti))
+    if periksa and not henti and not berhenti.is_set():
+        kodes = kode_rup_tak_berpasangan(conn, [int(dasar["tahun"])])
+        log(f"=== Periksa RUP ke SiRUP: {len(kodes)} kode RUP tidak ada di daftar satker ===")
+        henti = catat("Periksa RUP", run_periksa_rup(conn, kodes, koneksi=koneksi, jeda=jeda, log=log, berhenti=berhenti))
+    if ekspor and not berhenti.is_set() and hasil.get("SPSE Non-Tender", 0) != 2:
+        from . import ekspor_publik
+        log("=== Ekspor salinan publik ===")
+        try:
+            r = ekspor_publik.ekspor(db_path, keluar or (konfig.ROOT / "publik"), log=log)
+            log(f"Salinan publik: {r['berkas']} berkas, {r['ukuran_mb']} MB di {keluar or (konfig.ROOT / 'publik')}")
+            hasil["Ekspor publik"] = 0
+        except Exception as e:
+            log(f"[GAGAL] ekspor publik: {e!r}")
+            hasil["Ekspor publik"] = 1
+    if unggah and hasil.get("Ekspor publik") == 0 and not berhenti.is_set():
+        from . import unggah as _unggah
+        log("=== Unggah ke Cloudflare ===")
+        ok, pesan = _unggah.unggah(None if keluar is None else Path(keluar), log=log)
+        log(("Terunggah: " if ok else "[TIDAK TERUNGGAH] ") + pesan)
+        hasil["Unggah Cloudflare"] = 0 if ok else 1
+    log("=== RINGKASAN ===")
+    for nama, kode in hasil.items():
+        log(f"  {nama}: {'OK' if kode in (0, 4) else 'DIBLOKIR' if kode == 2 else 'DIHENTIKAN' if kode == 130 else f'gagal (kode {kode})'}")
+    if 2 in hasil.values():
+        return 2
+    if 130 in hasil.values():
+        return 130
+    return 0 if all(k in (0, 4) for k in hasil.values()) else 1

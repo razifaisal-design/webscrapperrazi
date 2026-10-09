@@ -71,6 +71,26 @@ def cmd_ekspor_publik(args):
     return 0
 
 
+def cmd_perbarui(args):
+    conn = db.buka(args.db)
+    try:
+        return tugas.run_perbarui(conn, args.db, tahun=args.tahun, koneksi=args.koneksi, jeda=args.jeda, usia_hari=args.usia_hari,
+                                  rinci=args.rinci, satker=args.satker, periksa=not args.tanpa_periksa, ekspor=not args.tanpa_ekspor,
+                                  keluar=args.keluar, unggah=args.unggah)
+    except KeyboardInterrupt:
+        print("\nDihentikan. Yang sudah terambil tetap tersimpan; jalankan lagi untuk melanjutkan.")
+        return 130
+    except ValueError as e:
+        raise SystemExit(f"Parameter tidak valid: {e}")
+
+
+def cmd_unggah(args):
+    from . import unggah
+    ok, pesan = unggah.unggah()
+    print(("Terunggah: " if ok else "TIDAK TERUNGGAH: ") + pesan)
+    return 0 if ok else 1
+
+
 def cmd_ambil(args):
     nama, target = muat_target(args.target, args.tahun, getattr(args, 'id_satker', None))
     conn = db.buka(args.db)
@@ -177,6 +197,20 @@ def main(argv=None):
     ep.add_argument("--keluar", default=str(ROOT / "publik"), help="folder hasil (default: publik/)")
     ep.add_argument("--tanpa-excel", action="store_true", help="lewati pembuatan berkas Excel (lebih cepat dan kecil)")
     ep.set_defaults(fn=cmd_ekspor_publik)
+    ug = sub.add_parser("unggah", help="unggah folder publik/ (salinan publik) ke Cloudflare dengan Wrangler")
+    ug.set_defaults(fn=cmd_unggah)
+    pb = sub.add_parser("perbarui", help="SATU PERINTAH: ambil data SiRUP + SPSE, periksa RUP, lalu ekspor salinan publik")
+    pb.add_argument("--tahun", type=int, help="tahun anggaran (default: dari config)")
+    pb.add_argument("--satker", help="hanya satu satker terdaftar (nama); default: semua satker terdaftar")
+    pb.add_argument("--rinci", default="semua", help="cakupan rincian SPSE (pemenang, kontrak, jadwal): semua | tidak | nama satker (default semua)")
+    pb.add_argument("--koneksi", type=int, default=1, help="jumlah koneksi paralel untuk detail (1-10; default 1)")
+    pb.add_argument("--jeda", type=float, default=1.5, help="jeda tiap koneksi antar permintaan, detik (default 1.5)")
+    pb.add_argument("--usia-hari", type=int, default=7, help="ambil ulang detail yang lebih tua dari N hari (0 = nonaktif)")
+    pb.add_argument("--tanpa-periksa", action="store_true", help="lewati pemeriksaan RUP langsung ke SiRUP")
+    pb.add_argument("--tanpa-ekspor", action="store_true", help="lewati ekspor salinan publik")
+    pb.add_argument("--keluar", help="folder salinan publik (default: publik/)")
+    pb.add_argument("--unggah", action="store_true", help="setelah ekspor, unggah ke Cloudflare dengan Wrangler")
+    pb.set_defaults(fn=cmd_perbarui)
     a = sub.add_parser("ambil", help="SATU PROSES: ambil daftar RUP, lalu detail paket, lalu bangun database Jalan/Gang")
     a.add_argument("sumber", choices=["sirup"])
     a.add_argument("--target")

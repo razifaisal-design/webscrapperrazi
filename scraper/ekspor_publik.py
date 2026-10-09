@@ -54,6 +54,7 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
     (keluar / "data").mkdir(parents=True)
     srv = _Peladen(db_path)
     ringkasan = {"berkas": 0}
+    log("Membuat salinan publik (rekap, database, SPSE, perbandingan, Excel): biasanya 1-2 menit, mohon tunggu ...")
     try:
         def simpan(jalur, nama, wajib=True):
             st, isi = srv.ambil(jalur)
@@ -78,10 +79,10 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
             _, td = muat_target(t, None)
             meta["bawaan"][t] = td["tahun"]
             for th in [*s["tahun"], "semua"]:
+                log(f"  SiRUP {s['satker'][:40]} - {'semua tahun (agak lama)' if th == 'semua' else th}")
                 parameter = "&".join(x for x in (f"tahun={th}", q_t) if x)
                 for api in ("rekap", "database", "perubahan"):
                     simpan(f"/api/{api}?{parameter}", f"{api}_{t}_{th}.json", wajib=False)
-                    log(f"  {api} {t} {th}") if api == "rekap" else None
                 if dengan_excel:
                     st, isi = srv.ambil(f"/api/excel?{parameter}")
                     if st == 200:
@@ -102,7 +103,7 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
             conn.close()
         _tulis(keluar / "data" / "jadwal_spse.json", jadwal)
         for th in tahun_spse:
-            log(f"  SPSE & perbandingan {th}")
+            log(f"  SPSE & perbandingan {th}" + (" (+ Excel)" if dengan_excel else ""))
             simpan(f"/api/spse?tahun={th}", f"spse_{th}.json")
             simpan(f"/api/banding?tahun={th}", f"banding_{th}.json")
             if dengan_excel:
@@ -112,6 +113,7 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
                         _tulis(keluar / "data" / nama, isi)
                         ringkasan["berkas"] += 1
         if dengan_excel:
+            log("  Excel semua tahun (SPSE & perbandingan) ...")
             for nama, jalur in (("spse_semua.xlsx", "/api/spse/excel?tahun=semua"), ("banding_semua.xlsx", "/api/banding/excel?tahun=semua")):
                 st, isi = srv.ambil(jalur)
                 if st == 200:
@@ -121,6 +123,7 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
         _tulis(keluar / "data" / "meta.json", meta)
     finally:
         srv.tutup()
+    log("  menyalin halaman ...")
     # --- halaman, gaya, skrip
     for sumber, tujuan in HALAMAN.items():
         h = (AKAR / sumber).read_text(encoding="utf-8")

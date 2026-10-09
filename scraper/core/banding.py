@@ -134,8 +134,17 @@ def _bandingkan(conn, lpse, jenis, tahun, ids, milik, tanpa_detail, sekarang, na
                 klaim.setdefault(kode, []).append((p, cara))
         else:
             sisa.append(p)
-    tanpa_pasangan = []
-    for p in sisa:                                          # tahap 3: nama + instansi, hanya RUP yang belum terklaim
+    luar = luar or {}
+
+    def rup_luar(p):
+        """RUP milik satker ini yang terbukti ADA di SiRUP lewat kodenya (dicek langsung), walau tidak tampil di daftar."""
+        return [luar[r["kode_rup"]] for r in p["rup"]
+                if r["kode_rup"] in luar and luar[r["kode_rup"]]["ditemukan"] and norm_satker(luar[r["kode_rup"]]["satker_nama"]) == norm_satker(nama_satker)]
+
+    # kode RUP yang disebut SPSE didahulukan dari pencocokan nama: nama yang sama bisa dipakai dua RUP berbeda (mis. diumumkan ulang)
+    sisa_nama = [p for p in sisa if not rup_luar(p)]
+    tanpa_pasangan = [p for p in sisa if rup_luar(p)]
+    for p in sisa_nama:                                     # tahap 3: nama + instansi, hanya RUP yang belum terklaim
         nama = {norm_nama(p["nama_paket"])} | {norm_nama(r["nama_paket"]) for r in p["rup"]}
         kandidat = [k for k, r in aktif.items() if k not in klaim and norm_nama(r["nama_paket"]) in nama]
         if kandidat:
@@ -165,7 +174,6 @@ def _bandingkan(conn, lpse, jenis, tahun, ids, milik, tanpa_detail, sekarang, na
                   "Tender/Seleksi": "Tender/Seleksi (belum diambil)"}.get(
                 kat, "Belum dapat dipastikan (detail SPSE belum lengkap)" if tanpa_detail else "Belum ada di SPSE")
             baris.append({**dasar, "status": st, "kecocokan": None, "kode_nontender": None})
-    luar = luar or {}
     for p in tanpa_pasangan:
         recs = [luar[r["kode_rup"]] for r in p["rup"] if r["kode_rup"] in luar]
         ada = [r for r in recs if r["ditemukan"]]

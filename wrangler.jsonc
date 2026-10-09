@@ -1,0 +1,8 @@
+{
+  // Salinan publik (hanya baca) dashboard: situs statis dari folder publik/ (dibuat oleh: python -m scraper ekspor-publik).
+  // Nama proyek = situs publik yang sudah ada di Cloudflare (https://spring-flower-c5ae.razi-faisal.workers.dev), jadi unggahan
+  // berikutnya MEMPERBARUI situs itu, bukan membuat situs baru. Jangan samakan dengan situs lain di akun (mis. TeknikaLens Web).
+  "name": "spring-flower-c5ae",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./publik" }
+}
