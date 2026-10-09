@@ -27,3 +27,6 @@ Pilihan yang masih sesuai aturan:
 1. **Jadwal di komputer sendiri** (launchd, 00:00 dan 13:00 WIB): komputer harus menyala/bangun pada jam itu. Web publik tetap online lewat Supabase + Cloudflare.
 2. **Self-hosted runner GitHub di komputer/perangkat rumah** yang selalu menyala: tombol dan jadwal GitHub dipakai, eksekusi memakai IP rumah.
 3. **VM gratis** (mis. Oracle Cloud Always Free): hanya jalan bila IP-nya diterima SiRUP/SPSE; harus diuji dulu (cek akses = 200).
+
+## Pusat Perintah (dashboard lokal)
+Halaman `/perintah` memuat semua perintah dengan penjelasan fungsi, kapan dipakai, perkiraan waktu, dan apa yang diubahnya (Lokal / Supabase / Web publik / Cloudflare). Satu perintah berjalan pada satu waktu dengan log dan tombol Hentikan. Halaman ini hanya ada di dashboard lokal; web publik tidak punya tombol pengambilan data.

@@ -84,3 +84,10 @@ Sumber: `https://spse.inaproc.id/pontianak/nontender`. Yang sudah dikerjakan: **
 - **Foto harian** (`sirup_foto`): tiap pengambilan daftar RUP menyimpan daftar RUP aktif hari itu (satu foto per hari per satker & tahun).
 - **Revisi RUP terpotong antar pengambilan** kini dipasangkan: RUP lama hilang di pengambilan N, RUP baru bernama sama muncul dalam 14 hari berikutnya, dengan syarat nama sama DAN (pagu selisih ≤ 10% ATAU 12 segmen MAK sama). Event BARU/HILANG diganti satu REVISI_RUP.
 - Belum: pengambilan terjadwal otomatis (launchd). Foto dan pasangan revisi hanya selengkap seberapa sering pengambilan dijalankan.
+
+## Home, kategori MAK PSU, tema (9 Oktober 2026)
+- `/` = **Home** (diagram lingkaran nilai per tahap untuk Jalan PSU, Saluran PSU, Semua); dashboard SiRUP pindah ke `/sirup`. Di web publik: `index.html` = Home, `sirup.html` = SiRUP.
+- Aturan: tahap = tahap terakhir yang tanggal mulainya sudah tiba; nilai = negosiasi bila ada, HPS bila belum; belum ada di SPSE = pagu SiRUP; paket batal dipisah; persen dari nilai total paket yang terinput di SiRUP. Logika: `scraper/core/home.py`.
+- Kategori dari MAK, hanya MAK 2026 (`config/kategori_home.json`): Jalan PSU = sub kegiatan 1.04.05.2.01.0012 + rekening 5.2.04.01.001.00004; Saluran PSU = 1.04.05.2.01.0011 + 5.2.04.02.002.00004; Jalan Kawasan Permukiman = 1.04.03.2.03.0013 + 5.2.04.01.001.00004 (dicatat, belum tampil di Home). Rekening dibaca dari 6 segmen setelah sub kegiatan (ekor MAK setelah segmen ke-12 diabaikan).
+- Referensi sub kegiatan dari kode_mak.db: tabel `ref_sub_kegiatan`, `ref_mak`; field `sirup_detail.sub_kegiatan_kode/nama` (nama kosong = belum diketahui, tidak ditebak). Impor ulang: `python -m scraper impor-mak <path>`.
+- Belum: aturan kategori tahun 2021-2025 (kode sub kegiatan berbeda: 0002 di 2024-2025, format lama sebelumnya); Home untuk satker selain Perkim.

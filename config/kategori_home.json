@@ -1,0 +1,10 @@
+{
+  "catatan": "Kategori untuk halaman Home. Aturan berlaku bila (sub kegiatan DAN rekening) paket cocok. Hanya MAK format 2026 (tahun_berlaku). MAK lain = 'Lainnya' dan tidak dimasukkan ke Home. Jenis Fisik/Konsultan ditentukan dari nama paket (pola 'konsultan' di config/targets.json), bukan dari MAK, karena paket konsultan memakai MAK yang sama dengan paket fisiknya.",
+  "tahun_berlaku": [2026],
+  "tampil_di_home": ["Jalan PSU", "Saluran PSU"],
+  "kategori": [
+    {"nama": "Jalan PSU", "sub_kegiatan": ["1.04.05.2.01.0012"], "rekening": ["5.2.04.01.001.00004"]},
+    {"nama": "Saluran PSU", "sub_kegiatan": ["1.04.05.2.01.0011"], "rekening": ["5.2.04.02.002.00004"]},
+    {"nama": "Jalan Kawasan Permukiman", "sub_kegiatan": ["1.04.03.2.03.0013"], "rekening": ["5.2.04.01.001.00004"]}
+  ]
+}

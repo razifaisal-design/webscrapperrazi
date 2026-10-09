@@ -44,6 +44,18 @@ def parse_halaman(html):
     return m.group(1), tahun
 
 
+_ELEMEN = re.compile(r"<(span|a|b|i|em|strong|small|div|label)\b[^>]*>.*?</\1\s*>", re.I | re.S)
+
+
+def bersihkan_nama(teks):
+    """Nama paket dari daftar SPSE kadang memuat penanda HTML, mis. '... <span class="badge">Pengadaan Langsung Ulang</span>'.
+    Elemen itu (beserta tulisannya) dibuang; sisa tag dilepas; spasi dirapikan. Info mentahnya tetap ada di kolom `raw`."""
+    import html
+    t = _ELEMEN.sub(" ", str(teks or ""))
+    t = re.sub(r"<[^>]+>", " ", t)
+    return " ".join(html.unescape(t).split())
+
+
 def hps_perkiraan(teks):
     """HPS di daftar tertulis ringkas: '19,9 Jt' -> 19900000, '1,2 M' -> 1200000000. Hanya PERKIRAAN (pembulatan);
     nilai pasti ada di halaman detail. Tidak terbaca -> None."""
@@ -72,7 +84,7 @@ def parse_baris(baris, lpse, jenis, tahun):
     flag = lambda i: len(baris) > i and str(baris[i]) == "1"      # noqa: E731
     return {
         "lpse": lpse, "jenis": jenis, "tahun": int(tahun), "kode_paket": kode,
-        "nama_paket": " ".join(str(baris[1] or "").split()), "instansi": str(baris[2] or "").strip(),
+        "nama_paket": bersihkan_nama(baris[1]), "instansi": str(baris[2] or "").strip(),
         "tahapan": str(baris[3] or "").strip(), "hps_teks": str(baris[4] or "").strip(),
         "hps_perkiraan": hps_perkiraan(baris[4]), "metode": str(baris[5] or "").strip(),
         "kategori": kategori.strip(), "tahun_anggaran": int(ta) if ta.strip().isdigit() else None,

@@ -16,9 +16,9 @@ from . import web
 from .konfig import daftar_target, muat_target
 
 AKAR = Path(__file__).resolve().parent
-HALAMAN = {"dashboard.html": "index.html", "spse.html": "spse.html", "banding.html": "banding.html", "grafik.html": "grafik.html"}
-TAUTAN = (('"/gaya.css"', '"gaya.css"'), ('"/bersama.js"', '"bersama.js"'),
-          ('href="/"', 'href="index.html"'), ('href="/spse"', 'href="spse.html"'), ('href="/banding"', 'href="banding.html"'),
+HALAMAN = {"home.html": "index.html", "dashboard.html": "sirup.html", "spse.html": "spse.html", "banding.html": "banding.html", "grafik.html": "grafik.html"}
+TAUTAN = (('"/gaya.css"', '"gaya.css"'), ('"/bersama.js"', '"bersama.js"'), ('"/filter_ketik.js"', '"filter_ketik.js"'),
+          ('href="/sirup"', 'href="sirup.html"'), ('href="/"', 'href="index.html"'), ('href="/spse"', 'href="spse.html"'), ('href="/banding"', 'href="banding.html"'),
           ('href="/grafik"', 'href="grafik.html"'), ('"/grafik" + qsTarget()', '"grafik.html" + qsTarget()'))
 
 
@@ -113,6 +113,21 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
                     if st == 200:
                         _tulis(keluar / "data" / nama, isi)
                         ringkasan["berkas"] += 1
+        # Home: satu berkas per tahun (dan 'semua'), berisi hasil untuk semua satker ("") dan tiap satker ber-SiRUP (kunci = nama dinormalkan)
+        from urllib.parse import quote
+        from .core.db import norm_satker
+        for th in [*tahun_spse, "semua"]:
+            log(f"  Home {th}")
+            st, isi = srv.ambil(f"/api/home?tahun={th}")
+            if st != 200:
+                continue
+            paket = {"": json.loads(isi)}
+            for nama in paket[""]["satker_daftar"]:
+                st2, isi2 = srv.ambil(f"/api/home?tahun={th}&satker={quote(nama)}")
+                if st2 == 200:
+                    paket[norm_satker(nama)] = json.loads(isi2)
+            _tulis(keluar / "data" / f"home_{th}.json", paket)
+            ringkasan["berkas"] += 1
         if dengan_excel:
             log("  Excel semua tahun (SPSE & perbandingan) ...")
             for nama, jalur in (("spse_semua.xlsx", "/api/spse/excel?tahun=semua"), ("banding_semua.xlsx", "/api/banding/excel?tahun=semua")):
@@ -136,6 +151,7 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
     shutil.copy(AKAR / "gaya.css", keluar / "gaya.css")
     shutil.copy(AKAR / "bersama.js", keluar / "bersama.js")
     shutil.copy(AKAR / "statis.js", keluar / "statis.js")
+    shutil.copy(AKAR / "filter_ketik.js", keluar / "filter_ketik.js")
     (keluar / ".nojekyll").write_text("", encoding="utf-8")
     ringkasan["ukuran_mb"] = round(sum(f.stat().st_size for f in keluar.rglob("*") if f.is_file()) / 1e6, 1)
     return ringkasan

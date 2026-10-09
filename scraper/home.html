@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home</title>
+<link rel="stylesheet" href="/gaya.css">
+<style>
+  .judul-halaman { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
+  .judul-halaman h1 { font-size: 26px; letter-spacing: -.01em; }
+  .filter-home { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .filter-home label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); font-weight: 550; text-transform: uppercase; letter-spacing: .04em; }
+  .filter-home select { min-width: 150px; font-size: 14px; color: var(--text); text-transform: none; letter-spacing: 0; font-weight: 450; }
+  .kartu-angka { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--bayang); padding: 18px 20px; position: relative; overflow: hidden; }
+  .kartu-angka::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 4px; background: var(--w, var(--accent)); }
+  .kartu-angka .l { color: var(--muted); font-size: 12.5px; font-weight: 550; }
+  .kartu-angka .v { font-size: 30px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kartu-angka .s { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .diagram-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-top: 16px; }
+  .diagram { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--bayang); padding: 20px; }
+  .diagram h2 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+  .diagram .sub { margin-top: 2px; }
+  .donat { display: block; width: min(250px, 70%); margin: 14px auto 10px; }
+  .donat .tengah-besar { font: 700 4.4px "Inter", sans-serif; fill: var(--text); text-anchor: middle; }
+  .donat .tengah-kecil { font: 500 2.4px "Inter", sans-serif; fill: var(--muted); text-anchor: middle; }
+  table.ket { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.ket th { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  table.ket td { padding: 7px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  table.ket tr:last-child td { border-bottom: none; }
+  table.ket td.n, table.ket th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.ket tfoot td { font-weight: 650; border-top: 2px solid var(--line); border-bottom: none; }
+  .titik { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
+  .nol { color: var(--muted); opacity: .6; }
+  .aturan { margin-top: 18px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .aturan b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Halaman"><a class="aktif" href="/">Home</a><a href="/sirup">SiRUP</a><a href="/spse">SPSE (LPSE)</a><a href="/banding">Perbandingan SiRUP ↔ SPSE</a><a href="/perintah">Pusat Perintah</a></nav>
+  <div class="judul-halaman">
+    <div>
+      <h1>Progres Paket PSU</h1>
+      <div class="sub" id="sub">Memuat…</div>
+    </div>
+    <div class="filter-home">
+      <label>Satker / Dinas<select id="satker"></select></label>
+      <label>Tahun<select id="tahun"></select></label>
+      <button class="btn" id="muat" style="align-self:flex-end">Muat ulang</button>
+    </div>
+  </div>
+  <div id="catatan"></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="diagram-grid" id="diagram"></div>
+  <div class="aturan" id="aturan"></div>
+</div>
+<script src="/bersama.js"></script>
+<script>
+const WARNA = { "tahap:Upload Dokumen Penawaran": "#a7f3d0", "tahap:Pembukaan Dokumen Penawaran": "#6ee7b7", "tahap:Evaluasi Penawaran": "#34d399",
+  "tahap:Klarifikasi Teknis dan Negosiasi": "#10b981", "tahap:Penandatanganan Kontrak": "#047857", belum_tayang: "#cbd5e1", batal: "#fca5a5",
+  tanpa_jadwal: "#fde68a", tidak_spse: "#c4b5fd" };
+const warna = (k) => WARNA[k] || "#94a3b8";
+let D = null, tahun = baca("home_tahun", ""), satker = baca("home_satker", ""), timer = null, sedang = false, teksTerakhir = "";
+
+async function muat() {
+  if (sedang) return;
+  sedang = true;
+  try {
+    D = await ambilJSON("/api/home?" + new URLSearchParams({ ...(tahun ? { tahun } : {}), satker }));
+    if (!tahun) tahun = String(D.tahun_dipilih);
+    const t = JSON.stringify([D.kelompok, D.kosong, D.tahun, D.hari_ini]);
+    if (t !== teksTerakhir) { teksTerakhir = t; gambar(); }
+  } catch (e) { $("sub").textContent = "Gagal memuat: " + e.message; }
+  finally { sedang = false; }
+}
+function gambarFilter() {
+  const th = ["semua", ...D.tahun.map(String)];
+  $("tahun").innerHTML = th.map((y) => `<option value="${y}" ${y === String(tahun) ? "selected" : ""}>${y === "semua" ? "Semua tahun" : y}</option>`).join("");
+  $("satker").innerHTML = `<option value="">Semua satker</option>` + D.satker_daftar.map((n) => `<option value="${esc(n)}" ${n === satker ? "selected" : ""}>${esc(n)}</option>`).join("");
+}
+function donat(k, judul, sub) {
+  const total = k.total_nilai, R = 15.9155;
+  let akum = 0;
+  const irisan = k.bucket.filter((b) => b.nilai > 0).map((b) => {
+    const p = total ? b.nilai * 100 / total : 0, el = `<circle r="${R}" cx="21" cy="21" fill="none" stroke="${warna(b.kunci)}" stroke-width="6.2" stroke-dasharray="${Math.max(p - 0.35, 0)} ${100 - Math.max(p - 0.35, 0)}" stroke-dashoffset="${25 - akum}"><title>${esc(b.nama)}: ${b.persen.toFixed(1)}%</title></circle>`;
+    akum += p; return el;
+  }).join("");
+  const baris = k.bucket.filter((b) => b.paket > 0 || b.tipe === "tahap").map((b) => `<tr class="${b.paket ? "" : "nol"}"><td><i class="titik" style="background:${warna(b.kunci)}"></i>${esc(b.nama)}</td>
+      <td class="n">${rp.format(b.paket)}</td><td class="n">${fmt(b.nilai)}</td><td class="n">${b.persen.toFixed(1).replace(".", ",")}%</td></tr>`).join("");
+  return `<section class="diagram"><h2>${esc(judul)}</h2><div class="sub">${esc(sub)}</div>
+    <svg class="donat" viewBox="0 0 42 42" role="img" aria-label="Diagram ${esc(judul)}"><circle r="${R}" cx="21" cy="21" fill="none" stroke="var(--line)" stroke-width="6.2"/>${irisan}
+      <text class="tengah-besar" x="21" y="21.5">${ringkas(total).replace("Rp ", "")}</text><text class="tengah-kecil" x="21" y="26">${rp.format(k.total_paket)} paket</text></svg>
+    <table class="ket"><thead><tr><th>Tahap terakhir</th><th class="n">Paket</th><th class="n">Nilai</th><th class="n">% nilai</th></tr></thead><tbody>${baris}</tbody>
+      <tfoot><tr><td>Total terinput di SiRUP</td><td class="n">${rp.format(k.total_paket)}</td><td class="n">${fmt(k.total_nilai)}</td><td class="n">100%</td></tr></tfoot></table>
+    <div class="sub" style="margin-top:8px">Fisik ${rp.format(k.fisik)} · Konsultan ${rp.format(k.konsultan)} · pagu SiRUP ${fmt(k.total_pagu_sirup)}</div></section>`;
+}
+function gambar() {
+  gambarFilter();
+  const th = D.tahun_dipilih === "semua" ? "semua tahun" : "tahun " + D.tahun_dipilih;
+  $("sub").textContent = `${satker || "Semua satker"} · ${th} · per ${D.hari_ini.split("-").reverse().join("/")}`;
+  $("catatan").innerHTML = D.kosong ? `<div class="note warn">${esc(D.pesan || "Belum ada data.")}</div>` : "";
+  const s = D.kelompok.Semua;
+  if (!s) { $("kpis").innerHTML = ""; $("diagram").innerHTML = ""; $("aturan").innerHTML = ""; return; }
+  const kpi = (l, v, sub, w) => `<div class="kartu-angka" style="--w:${w}"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  $("kpis").innerHTML =
+    kpi("Paket terinput di SiRUP", rp.format(s.total_paket), `Jalan + Saluran PSU · pagu ${ringkas(s.total_pagu_sirup)}`, "#10b981") +
+    kpi("Sudah tayang di SPSE", rp.format(s.paket_tayang), `${s.total_paket ? (s.paket_tayang * 100 / s.total_paket).toFixed(1).replace(".", ",") : 0}% dari paket terinput (tanpa paket batal)`, "#047857") +
+    kpi("Nilai paket tayang", ringkas(s.nilai_tayang), `${fmt(s.nilai_tayang)} · negosiasi bila ada, HPS bila belum`, "#34d399") +
+    kpi("Sudah ada negosiasi", rp.format(s.paket_negosiasi), `dari ${rp.format(s.paket_tayang)} paket tayang`, "#6ee7b7");
+  $("diagram").innerHTML = D.tampil.map((n) => D.kelompok[n] ? donat(D.kelompok[n], n, `${rp.format(D.kelompok[n].total_paket)} paket terinput di SiRUP`) : "").join("") + donat(s, "Semua", "Jalan PSU + Saluran PSU");
+  $("aturan").innerHTML = `<b>Cara membaca.</b> Setiap diagram membagi <b>nilai (Rp)</b> seluruh paket kategori itu yang sudah terinput di SiRUP menurut <b>tahap terakhir yang tanggal mulainya sudah tiba</b> (Upload → Pembukaan → Evaluasi → Klarifikasi dan Negosiasi → Penandatanganan Kontrak).
+    Nilai paket = hasil negosiasi bila ada, bila belum memakai HPS; paket yang belum tayang di SPSE memakai pagu SiRUP; paket batal dipisah. Kategori ditentukan dari MAK (hanya MAK ${D.tahun_berlaku.join(", ")}); MAK lain ("Lainnya") dan Jalan Kawasan Permukiman tidak dimasukkan.`;
+}
+$("tahun").addEventListener("change", () => { tahun = $("tahun").value; simpan("home_tahun", tahun); teksTerakhir = ""; muat(); });
+$("satker").addEventListener("change", () => { satker = $("satker").value; simpan("home_satker", satker); teksTerakhir = ""; muat(); });
+$("muat").addEventListener("click", () => { teksTerakhir = ""; muat(); });
+timer = setInterval(() => { if (!document.hidden) muat(); }, 60000);
+muat();
+</script>
+<script src="/filter_ketik.js"></script>
+</body>
+</html>

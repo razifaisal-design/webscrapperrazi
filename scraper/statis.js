@@ -6,18 +6,40 @@
   const cache = {};
   // Sumber data: Supabase (window.PANTAU_SUPABASE diisi saat terbit) atau berkas lokal data/ (ekspor statis biasa)
   const SB = window.PANTAU_SUPABASE || null;
-  const sbPermintaan = (nama, kolom, terima) => asli(`${SB.url}/rest/v1/publik_berkas?nama=eq.${encodeURIComponent(nama)}&select=${kolom}`,
-    { headers: { apikey: SB.kunci, Accept: terima } });
-  const ambil = (nama) => SB
-    ? sbPermintaan(nama, "isi", "application/vnd.pgrst.object+json").then(async (r) => {
+  // --- Kesegaran data ---------------------------------------------------------------------------------------------------------
+  // meta.json (kecil) SELALU diambil dari jaringan tanpa cache; isinya penanda waktu terbitan (`dibuat`). Berkas data diminta dengan
+  // alamat yang memuat penanda itu, jadi: terbitan baru = alamat baru = data baru, sedangkan selama belum ada terbitan baru peramban
+  // boleh memakai salinannya. Bila penanda berubah, semua salinan di memori dibuang. Berlaku tiap muat ulang DAN tiap kali halaman
+  // memeriksa pembaruan sendiri, jadi halaman yang dibiarkan terbuka pun ikut mendapat data terbaru.
+  let versi = null, metaP = null, metaWaktu = 0;
+  const epoch = () => Math.floor(Date.parse(versi || "") / 1000) || 0;
+  const sbPermintaan = (nama, kolom, terima, segar) =>
+    asli(`${SB.url}/rest/v1/publik_berkas?nama=eq.${encodeURIComponent(nama)}&select=${kolom}` + (segar ? "" : `&ukuran=gte.-${epoch()}`),   // filter selalu benar; hanya mengubah alamat per terbitan
+      { headers: { apikey: SB.kunci, Accept: terima }, cache: segar ? "no-store" : "default" });
+  const ambil = (nama, segar) => SB
+    ? sbPermintaan(nama, "isi", "application/vnd.pgrst.object+json", segar).then(async (r) => {
         if (!r.ok) throw new Error("tidak ada di salinan publik: " + nama);
         return (await r.json()).isi;
       })
-    : asli(BASE + "data/" + nama).then((r) => {
+    : asli(BASE + "data/" + nama + (segar ? "?t=" + Date.now() : "?v=" + epoch()), segar ? { cache: "no-store" } : undefined).then((r) => {
         if (!r.ok) throw new Error("tidak ada di salinan publik: " + nama);
         return r.json();
       });
-  const muat = (nama) => cache[nama] || (cache[nama] = ambil(nama).catch((e) => { delete cache[nama]; throw e; }));
+  function meta() {                                                // dipakai bersama oleh beberapa pemanggilan dalam 4 detik
+    if (metaP && Date.now() - metaWaktu < 4000) return metaP;
+    metaWaktu = Date.now();
+    metaP = ambil("meta.json", true).then((m) => {
+      if (versi !== null && m.dibuat !== versi) for (const k of Object.keys(cache)) delete cache[k];
+      versi = m.dibuat;
+      return m;
+    }).catch((e) => { metaP = null; throw e; });
+    return metaP;
+  }
+  const muat = async (nama) => {
+    if (nama === "meta.json") return meta();
+    await meta();                                                  // memastikan penanda versi sudah diketahui / cache lama sudah dibuang
+    return cache[nama] || (cache[nama] = ambil(nama, false).catch((e) => { delete cache[nama]; throw e; }));
+  };
   async function unduhBerkas(nama) {
     if (!SB) { location.href = BASE + "data/" + nama; return; }
     let j;
@@ -32,7 +54,8 @@
   }
 
   const jawab = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { "Content-Type": "application/json" } });
-  const norm = (s) => String(s || "").toUpperCase().split(/\s+/).filter(Boolean).join(" ");
+  // sama dengan db.norm_satker di Python: tanda baca dibuang, ejaan lain disatukan (PEMUKIMAN = PERMUKIMAN)
+  const norm = (s) => String(s || "").toUpperCase().replace(/[^0-9A-Z]+/g, " ").split(" ").filter(Boolean).map((k) => (k === "PEMUKIMAN" ? "PERMUKIMAN" : k)).join(" ");
 
   async function api(u) {
     const p = u.pathname, q = u.searchParams, meta = await muat("meta.json");
@@ -45,6 +68,11 @@
       return muat(`${p.slice(5)}_${t}_${q.get("tahun") || meta.bawaan[t]}.json`);
     }
     if (p === "/api/spse/jadwal") return { kode_paket: q.get("kode"), jadwal: (await muat("jadwal_spse.json"))[q.get("kode")] || [] };
+    if (p === "/api/home") {                                           // hasil Home sudah dihitung per tahun & satker saat terbit
+      const th = q.get("tahun") || String(meta.bawaan.spse), paket = await muat(`home_${th}.json`), kunci = q.get("satker") ? norm(q.get("satker")) : "";
+      if (paket[kunci]) return paket[kunci];
+      return { ...paket[""], kelompok: {}, kosong: true, pesan: "Satker ini belum punya data kategori Home." };
+    }
     if (p === "/api/spse") return spse(q, meta);
     if (p === "/api/banding") return banding(q, meta);
     throw new Error("tidak tersedia di salinan publik");
@@ -124,6 +152,7 @@
     gaya.textContent = "#bukaAmbil,#ambil,#bukaPeriksa,#periksa,#pb,#basi,#jobTeks,#interval,label[for=interval]{display:none!important}" +
       ".publik{background:var(--accent-soft);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:13px}";
     document.head.appendChild(gaya);
+    document.querySelectorAll('.nav a[href$="perintah"]').forEach((x) => x.remove());          // Pusat Perintah hanya ada di dashboard lokal
     try {
       const meta = await muat("meta.json"), w = document.querySelector(".wrap");
       const tgl = new Date(meta.dibuat).toLocaleString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });

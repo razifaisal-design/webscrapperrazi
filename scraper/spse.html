@@ -8,7 +8,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="nav" aria-label="Halaman"><a href="/">SiRUP</a><a class="aktif" href="/spse">SPSE (LPSE)</a><a href="/banding">Perbandingan SiRUP ↔ SPSE</a></nav>
+  <nav class="nav" aria-label="Halaman"><a href="/">Home</a><a href="/sirup">SiRUP</a><a class="aktif" href="/spse">SPSE (LPSE)</a><a href="/banding">Perbandingan SiRUP ↔ SPSE</a><a href="/perintah">Pusat Perintah</a></nav>
   <header>
     <div>
       <h1>SPSE Non-Tender — paket, pemenang, kontrak, jadwal</h1>
@@ -75,12 +75,12 @@
 <script>
 let D = null, tab = baca("spse_tab", "dinas"), tahun = baca("spse_tahun", ""), satker = baca("spse_satker", ""), interval = parseInt(baca("spse_interval", "30"), 10), timer = null, sedang = false;
 let teksTerakhir = "";
-const F = { dinas: { tahapan: "Semua", metode: "Semua", jenis: "Semua", pemenang: "Semua", kontrak: "Semua", jadwal: "Semua" },
+const F = { penyedia: { bentuk: "Semua", jenis: "Semua", penyedia: "Semua", batal: "Tidak" }, dinas: { tahapan: "Semua", metode: "Semua", jenis: "Semua", pemenang: "Semua", kontrak: "Semua", jadwal: "Semua" },
             semua: { tahapan: "Semua", metode: "Semua", kategori: "Semua" } };
-const urut = { dinas: { k: "kode_paket", asc: false }, jadwal: { k: "jadwal_diubah", asc: false }, semua: { k: "kode_paket", asc: false } };
+const urut = { penyedia: { k: "jumlah", asc: false }, dinas: { k: "kode_paket", asc: false }, jadwal: { k: "jadwal_diubah", asc: false }, semua: { k: "kode_paket", asc: false } };
 const buka = new Set(), JAD = {};
 const H = { hal: 0, per: 50 };
-const NAMA_TAB = { dinas: "Paket Terinci", jadwal: "Perubahan Jadwal", semua: "Semua Paket SPSE" };
+const NAMA_TAB = { dinas: "Paket Terinci", penyedia: "Penyedia", jadwal: "Perubahan Jadwal", semua: "Semua Paket SPSE" };
 if (!(tab in NAMA_TAB)) tab = "dinas";
 
 async function muat() {
@@ -131,13 +131,14 @@ function gambar() {
     kpi("Jadwal pernah diubah", rp.format(r.jadwal_diubah), "paket dengan perubahan jadwal");
   const nTab = (t) => t === "jadwal" ? ` <span class="badge w">${r.jadwal_diubah}</span>` : "";
   $("tabs").innerHTML = Object.entries(NAMA_TAB).map(([k, v]) => `<button class="tab ${k === tab ? "aktif" : ""}" data-t="${k}">${v}${nTab(k)}</button>`).join("");
-  $("cari").placeholder = tab === "semua" ? "Cari kode paket, nama paket, tahapan, satker…" : "Cari kode paket / RUP, nama paket, satker, pemenang…";
+  $("cari").placeholder = tab === "penyedia" ? "Cari nama penyedia, nama paket, satker, kode paket…" : tab === "semua" ? "Cari kode paket, nama paket, tahapan, satker…" : "Cari kode paket / RUP, nama paket, satker, pemenang…";
   renderPB(); filterUI(); isiTabel();
 }
 $("tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-t]"); if (!b) return; tab = b.dataset.t; simpan("spse_tab", tab); H.hal = 0; buka.clear(); $("cari").value = ""; gambar(); });
 $("cari").addEventListener("input", () => { H.hal = 0; isiTabel(); });
 
 function filterUI() {
+  if (tab === "penyedia") return filterPenyedia();
   const f = F[tab === "semua" ? "semua" : "dinas"], baris = D.baris.filter((b) => tab === "semua" ? true : b.lengkap);
   const o = (k, l, kolom) => sel(k, l, [["Semua", "Semua"], ...unik(baris.map((b) => b[kolom || k])).map((x) => [x, x])], f[k]);
   let h = o("tahapan", "Tahapan") + o("metode", "Metode");
@@ -146,7 +147,7 @@ function filterUI() {
     sel("kontrak", "Nilai kontrak", [["Semua", "Semua"], ["ya", "Sudah terisi"], ["tidak", "Belum"]], f.kontrak);
   $("filter").innerHTML = h;
 }
-$("filter").addEventListener("change", (e) => { const k = e.target.dataset.f; if (!k) return; F[tab === "semua" ? "semua" : "dinas"][k] = e.target.value; H.hal = 0; isiTabel(); });
+$("filter").addEventListener("change", (e) => { const k = e.target.dataset.f; if (!k) return; F[tab === "semua" ? "semua" : tab === "penyedia" ? "penyedia" : "dinas"][k] = e.target.value; H.hal = 0; isiTabel(); });
 
 function tersaring() {
   const q = $("cari").value.trim().toLowerCase();
@@ -192,6 +193,7 @@ function sel_(b, k) {
   }
 }
 function isiTabel() {
+  if (tab === "penyedia") return isiPenyedia();
   const kol = KOLOM[tab], { k, asc } = urut[tab];
   const rows = tersaring().sort((a, b) => { const x = a[k] ?? "", y = b[k] ?? ""; const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "id", { numeric: true }); return asc ? c : -c; });
   const hm = Math.max(1, Math.ceil(rows.length / H.per)); H.hal = Math.min(H.hal, hm - 1);
@@ -228,6 +230,7 @@ $("tabel").addEventListener("click", async (e) => {
   if (th) { const k = th.dataset.k; urut[tab] = { k, asc: urut[tab].k === k ? !urut[tab].asc : true }; return isiTabel(); }
   const tr = e.target.closest("tr.grup"); if (!tr || tab === "semua") return;
   const kode = tr.dataset.kode;
+  if (tab === "penyedia") { buka.has(kode) ? buka.delete(kode) : buka.add(kode); return isiTabel(); }
   if (buka.has(kode)) { buka.delete(kode); return isiTabel(); }
   buka.add(kode); isiTabel();
   if (!JAD[kode]) { try { JAD[kode] = (await ambilJSON("/api/spse/jadwal?kode=" + kode)).jadwal; } catch (err) { JAD[kode] = []; } isiTabel(); }
@@ -235,9 +238,84 @@ $("tabel").addEventListener("click", async (e) => {
 $("halaman").addEventListener("click", (e) => { const b = e.target.closest("[data-hal]"); if (b) { H.hal += parseInt(b.dataset.hal, 10); isiTabel(); } });
 $("halaman").addEventListener("change", (e) => { if (e.target.id === "perhal") { H.per = parseInt(e.target.value, 10); H.hal = 0; isiTabel(); } });
 
+/* ---------- tab Penyedia: pemenang dikelompokkan per perusahaan ---------- */
+const bentukUsaha = (n) => (/^\s*cv(\b|(?=[a-z]))/i.test(n) || /\bcv\.?\s*$/i.test(n)) ? "CV" : (/^\s*pt\b/i.test(n) || /\bpt\.?\s*$/i.test(n)) ? "PT" : "Lainnya";
+const kunciPenyedia = (n) => n.toLowerCase().replace(/^\s*(cv|pt)(?=[a-z])/, "").replace(/\b(cv|pt)\b\.?/g, "").replace(/[^a-z0-9]/g, "");
+const PENYEDIA_KOLOM = [["tampil", "Penyedia"], ["jumlah", "Paket", "num"], ["nsatker", "Satker", "num"], ["tahunTeks", "Tahun"], ["pagu", "Total pagu", "num"], ["hps", "Total HPS", "num"],
+  ["negosiasi", "Total negosiasi", "num"], ["kontrak", "Total nilai kontrak", "num"], ["kontrakN", "Kontrak terisi", "num"]];
+function kelompokPenyedia() {
+  const f = F.penyedia, peta = new Map();
+  for (const b of D.baris) {
+    if (!(b.lengkap && b.is_active && b.pemenang_nama)) continue;
+    if (f.batal !== "Ya" && /batal/i.test(b.tahapan || "")) continue;
+    if (f.jenis !== "Semua" && b.jenis_pengadaan !== f.jenis) continue;
+    const nama = b.pemenang_nama.split(";")[0].trim(), kunci = kunciPenyedia(nama);
+    if (!kunci) continue;
+    let e = peta.get(kunci);
+    if (!e) peta.set(kunci, e = { kunci, nama: new Map(), paket: [], pagu: 0, hps: 0, penawaran: 0, negosiasi: 0, kontrak: 0, kontrakN: 0, satker: new Set(), tahun: new Set() });
+    e.nama.set(nama, (e.nama.get(nama) || 0) + 1); e.paket.push(b);
+    e.pagu += b.pagu || 0; e.hps += b.hps || 0; e.penawaran += b.harga_penawaran || 0; e.negosiasi += b.hasil_negosiasi || 0;
+    if (b.kontrak_terisi) { e.kontrak += b.nilai_kontrak || 0; e.kontrakN++; }
+    e.satker.add(b.satker); e.tahun.add(b.tahun);
+  }
+  return [...peta.values()].map((e) => {
+    const tampil = [...e.nama].sort((a, c) => c[1] - a[1] || c[0].length - a[0].length)[0][0], th = [...e.tahun].sort();
+    return Object.assign(e, { tampil, bentuk: bentukUsaha(tampil), jumlah: e.paket.length, nsatker: e.satker.size, tahunMin: th[0],
+      tahunTeks: th.length > 3 ? `${th[0]}–${th[th.length - 1]} (${th.length} thn)` : th.join(", ") });
+  });
+}
+function penyediaTersaring() {
+  const f = F.penyedia, q = $("cari").value.trim().toLowerCase();
+  let rows = kelompokPenyedia().filter((e) => (f.bentuk === "Semua" || e.bentuk === f.bentuk) && (f.penyedia === "Semua" || e.kunci === f.penyedia) &&
+    (!q || e.tampil.toLowerCase().includes(q) || e.paket.some((b) => `${b.nama_paket} ${b.satker || ""} ${b.kode_paket}`.toLowerCase().includes(q))));
+  const { k, asc } = urut.penyedia;
+  rows = rows.sort((a, b) => { const x = a[k] ?? "", y = b[k] ?? ""; const c = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "id", { numeric: true }); return asc ? c : -c; });
+  return { rows };
+}
+function filterPenyedia() {
+  const f = F.penyedia, semua = kelompokPenyedia();
+  const jenis = unik(D.baris.filter((b) => b.lengkap && b.pemenang_nama).map((b) => b.jenis_pengadaan));
+  $("filter").innerHTML = sel("bentuk", "Bentuk usaha", [["Semua", "Semua"], ["CV", "CV"], ["PT", "PT"], ["Lainnya", "Lainnya"]], f.bentuk) +
+    sel("jenis", "Jenis pengadaan", [["Semua", "Semua"], ...jenis.map((x) => [x, x])], f.jenis) +
+    sel("penyedia", "Penyedia", [["Semua", "Semua penyedia"], ...semua.sort((a, b) => b.jumlah - a.jumlah).map((e) => [e.kunci, `${e.tampil} (${e.jumlah})`])], f.penyedia) +
+    sel("batal", "Sertakan paket batal", [["Tidak", "Tidak"], ["Ya", "Ya"]], f.batal);
+}
+function isiPenyedia() {
+  const { rows } = penyediaTersaring(), kol = PENYEDIA_KOLOM;
+  const hm = Math.max(1, Math.ceil(rows.length / H.per)); H.hal = Math.min(H.hal, hm - 1);
+  const potong = rows.slice(H.hal * H.per, H.hal * H.per + H.per);
+  const jum = (f) => rows.reduce((s, e) => s + e[f], 0);
+  $("hitung").textContent = `${rp.format(rows.length)} penyedia`;
+  $("ringkasan").innerHTML = `<div class="ringkasan"><b>${rp.format(rows.length)}</b> penyedia · <b>${rp.format(jum("jumlah"))}</b> paket · pagu <b>${fmt(jum("pagu"))}</b> · negosiasi <b>${fmt(jum("negosiasi"))}</b> · nilai kontrak <b>${fmt(jum("kontrak"))}</b> (${rp.format(jum("kontrakN"))} paket terisi PPK). Klik baris untuk melihat daftar paketnya.</div>`;
+  if (!D.baris.length) { $("tabel").innerHTML = `<tbody><tr><td class="kosong">Belum ada data SPSE untuk pilihan ini.</td></tr></tbody>`; $("halaman").innerHTML = ""; return; }
+  const kepala = kol.map(([kk, l, c]) => `<th class="s ${c || ""}" data-k="${kk}">${l}${urut.penyedia.k === kk ? (urut.penyedia.asc ? " ▲" : " ▼") : ""}</th>`).join("");
+  const sel_p = (e, kk) => kk === "tampil" ? `<b>${esc(e.tampil)}</b> <span class="tag">${e.bentuk}</span>` : ["pagu", "hps", "negosiasi", "kontrak"].includes(kk) ? fmt(e[kk]) :
+    kk === "kontrakN" ? `${e.kontrakN} / ${e.jumlah}` : esc(e[kk]);
+  const detail = (e) => `<table class="jadwal-rinci"><thead><tr><th>Tahun</th><th>Kode non tender</th><th>Satker / Dinas</th><th>Nama paket</th><th class="num">Pagu</th><th class="num">HPS</th><th class="num">Negosiasi</th><th class="num">Nilai kontrak</th><th>Tahapan</th></tr></thead><tbody>` +
+    e.paket.slice().sort((a, b) => b.tahun - a.tahun || (b.hasil_negosiasi || 0) - (a.hasil_negosiasi || 0)).map((b) => `<tr><td>${b.tahun}</td><td>${kodeLink(b)}</td><td>${esc(b.satker)}</td><td>${esc(b.nama_paket)}</td>
+      <td class="num">${fmt(b.pagu)}</td><td class="num">${fmt(b.hps)}</td><td class="num">${fmt(b.hasil_negosiasi)}</td><td class="num">${b.kontrak_terisi ? fmt(b.nilai_kontrak) : '<span class="tag belum">Belum</span>'}</td><td>${tagTahap(b.tahapan)}</td></tr>`).join("") +
+    `<tr><td colspan="4"><b>Jumlah ${e.paket.length} paket</b></td><td class="num"><b>${fmt(e.pagu)}</b></td><td class="num"><b>${fmt(e.hps)}</b></td><td class="num"><b>${fmt(e.negosiasi)}</b></td><td class="num"><b>${fmt(e.kontrak)}</b></td><td></td></tr></tbody></table>`;
+  const baris = potong.map((e) => `<tr class="grup" data-kode="${esc(e.kunci)}">${kol.map(([kk, , c]) => `<td class="${c || ""}">${sel_p(e, kk)}</td>`).join("")}</tr>` +
+    (buka.has(e.kunci) ? `<tr class="rinci"><td colspan="${kol.length}">${detail(e)}</td></tr>` : "")).join("");
+  const kaki = `<tfoot><tr><td><b>JUMLAH (semua ${rp.format(rows.length)} penyedia terfilter)</b></td><td class="num">${rp.format(jum("jumlah"))}</td><td></td><td></td><td class="num">${fmt(jum("pagu"))}</td><td class="num">${fmt(jum("hps"))}</td><td class="num">${fmt(jum("negosiasi"))}</td><td class="num">${fmt(jum("kontrak"))}</td><td class="num">${rp.format(jum("kontrakN"))}</td></tr></tfoot>`;
+  $("tabel").innerHTML = `<thead><tr>${kepala}</tr></thead><tbody>${baris || `<tr><td colspan="${kol.length}" class="kosong">Tidak ada penyedia untuk filter ini.</td></tr>`}</tbody>${kaki}`;
+  $("halaman").innerHTML = `<div class="halaman"><span class="sub">Halaman ${H.hal + 1} dari ${hm}</span><span style="display:flex;gap:8px;align-items:center">
+    <button class="btn" data-hal="-1" ${H.hal === 0 ? "disabled" : ""}>‹ Sebelumnya</button><button class="btn" data-hal="1" ${H.hal >= hm - 1 ? "disabled" : ""}>Berikutnya ›</button>
+    <label class="flab">Per halaman<select id="perhal">${[25, 50, 100, 250].map((n) => `<option ${n === H.per ? "selected" : ""}>${n}</option>`).join("")}</select></label></span></div>`;
+}
+
 /* ---------- CSV ---------- */
 $("unduh").addEventListener("click", () => {
   if (!D) return;
+  if (tab === "penyedia") {
+    const c = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`, rows = penyediaTersaring().rows;
+    const kolom = PENYEDIA_KOLOM.map(([k, l]) => [k, l]).filter(([k]) => k !== "tampil").concat([["bentuk", "Bentuk usaha"]]);
+    const baris = [["Penyedia", ...kolom.map(([, l]) => l)].map(c).join(",")].concat(rows.map((e) => [e.tampil, ...kolom.map(([k]) => e[k])].map(c).join(",")));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = `spse_penyedia_${tahun}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    return;
+  }
   const kol = KOLOM[tab].map(([k, l]) => [k, l]), c = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const baris = [kol.map(([, l]) => c(l)).join(",")].concat(tersaring().map((b) => kol.map(([k]) => c(b[k])).join(",")));
   const a = document.createElement("a");
@@ -305,5 +383,6 @@ const tugas = pasangTugas({
 });
 aturTimer(); muat();
 </script>
+<script src="/filter_ketik.js"></script>
 </body>
 </html>

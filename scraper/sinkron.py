@@ -14,7 +14,7 @@ import time
 
 from .konfig import ROOT
 
-TABEL = ("scrape_runs", "sirup_paket", "sirup_foto", "sirup_detail", "sirup_luar_daftar", "paket_events", "paket_lokasi", "ref_jalan", "ref_gang",
+TABEL = ("scrape_runs", "sirup_paket", "sirup_foto", "ref_sub_kegiatan", "ref_mak", "sirup_detail", "sirup_luar_daftar", "paket_events", "paket_lokasi", "ref_jalan", "ref_gang",
          "spse_paket", "spse_detail", "spse_jadwal")
 TIPE = {"INTEGER": "bigint", "TEXT": "text", "NUMERIC": "numeric", "REAL": "double precision"}
 RIWAYAT = ('CREATE TABLE IF NOT EXISTS public."sinkron_riwayat" (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, waktu timestamptz NOT NULL DEFAULT now(), '

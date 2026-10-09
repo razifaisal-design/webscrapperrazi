@@ -10,15 +10,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from . import perintah as _perintah
 from . import tugas as _tugas
 from .konfig import TARGETS, daftar_target, muat_target, satker_sirup
-from .core import banding, database, db, excel, lokasi, rekap, semua_tahun, statistik
+from .core import banding, database, db, excel, home, lokasi, rekap, semua_tahun, statistik
 from .core.klasifikasi import AturanError
 
 HTML = Path(__file__).with_name("dashboard.html")
 HTML_GRAFIK = Path(__file__).with_name("grafik.html")
 HALAMAN_STATIS = {"/spse": ("spse.html", "text/html; charset=utf-8"), "/banding": ("banding.html", "text/html; charset=utf-8"),
-                  "/gaya.css": ("gaya.css", "text/css; charset=utf-8"), "/bersama.js": ("bersama.js", "text/javascript; charset=utf-8")}
+                  "/gaya.css": ("gaya.css", "text/css; charset=utf-8"), "/bersama.js": ("bersama.js", "text/javascript; charset=utf-8"),
+                  "/filter_ketik.js": ("filter_ketik.js", "text/javascript; charset=utf-8")}
 
 
 def buka_readonly(path):
@@ -79,9 +81,25 @@ class PengelolaTugas:
             self._s.update(tahap_ke=ke, tahap_total=total, tahap_nama=nama, selesai=0, total=0, ok=0, gagal=0,
                            laju=None, sisa_detik=None)
 
-    def mulai(self, jenis, tahun, koneksi, jeda, usia_hari=7, semua=False, id_satker=None, satker=None, target=None):
-        if jenis not in ("semua", "daftar", "detail", "spse_nontender", "spse_semua", "banding_periksa"):
+    def mulai(self, jenis, tahun, koneksi, jeda, usia_hari=7, semua=False, id_satker=None, satker=None, target=None, opsi=None):
+        if jenis not in ("semua", "daftar", "detail", "spse_nontender", "spse_semua", "banding_periksa", "perintah"):
             raise ValueError("jenis tugas tidak dikenal")
+        if jenis == "perintah":                              # Pusat Perintah: opsi disaring menurut definisi di perintah.py
+            id_ = (opsi or {}).get("id")
+            bersih = _perintah.validasi(id_, (opsi or {}).get("opsi"))
+            with self._kunci:
+                if self._s["status"] == "berjalan":
+                    raise RuntimeError("Masih ada tugas yang berjalan.")
+                self._henti.clear()
+                self._sampel.clear()
+                self._tahap_mulai = self._mulai_mono = time.monotonic()
+                self._s.update(laju=None, sisa_detik=None, berlalu_detik=0, berakhir=None, lama_detik=None, status="berjalan", jenis="perintah:" + id_,
+                               tahun=bersih.get("tahun"), target=None, koneksi=bersih.get("koneksi"), tahap_ke=1, tahap_total=1,
+                               tahap_nama=_perintah.PER_ID[id_]["nama"], jeda=bersih.get("jeda"), mulai=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                               selesai=0, total=0, ok=0, gagal=0, log=[], kode=None, peringatan=None)
+            self._thread = threading.Thread(target=self._jalan_perintah, args=(id_, bersih), daemon=True)
+            self._thread.start()
+            return
         spse_ = jenis.startswith("spse_") or jenis == "banding_periksa"          # boleh tahun 'semua'; tidak memakai idSatker SiRUP
         if spse_ and str(tahun) == "semua":                  # SPSE: 'semua' = semua tahun di pilihan SPSE
             koneksi, jeda, usia_hari = int(koneksi), float(jeda), int(usia_hari)
@@ -111,6 +129,19 @@ class PengelolaTugas:
                            log=[], kode=None, peringatan=_tugas.peringatan_laju(1 if jenis in ("daftar", "spse_nontender") else koneksi, jeda))
         self._thread = threading.Thread(target=self._jalan, args=(jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker, satker, target), daemon=True)
         self._thread.start()
+
+    def _jalan_perintah(self, id_, opsi):
+        kode = 1
+        try:
+            kode = _perintah.jalankan(id_, opsi, self.db_path, self._log, self._henti)
+        except Exception as e:
+            self._log(f"[GAGAL] {e!r}")
+        finally:
+            with self._kunci:
+                self._s["berakhir"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                self._s["lama_detik"] = round(time.monotonic() - self._mulai_mono)
+                self._s["kode"] = kode
+                self._s["status"] = "selesai" if kode in (0, 4) else "dihentikan" if kode == 130 else "gagal"
 
     def _jalan(self, jenis, tahun, koneksi, jeda, usia_hari, semua, id_satker=None, satker=None, target=None):
         kode = 1
@@ -246,6 +277,10 @@ def data_spse(conn, th, bawaan, satker=None, rinci=None):
         sql += " AND p.tahun=?"
         par.append(int(yang))
     semua_baris = [dict(r) for r in conn.execute(sql + " ORDER BY p.tahun DESC, p.kode_paket DESC", par)]
+    kan = db.nama_kanonik(b["satker"] for b in semua_baris if b["ada_detail"])             # satu penulisan untuk satker yang sama
+    for b in semua_baris:
+        if b["ada_detail"] and b["satker"]:
+            b["satker"] = kan[db.norm_satker(b["satker"])]
     sk = db.norm_satker(satker) if satker else None
     # daftar satker (tidak terfilter) untuk pilihan filter utama
     daftar = {}
@@ -286,6 +321,17 @@ def data_spse(conn, th, bawaan, satker=None, rinci=None):
                         "jadwal_diubah": sum(1 for b in lengkap if b["jadwal_diubah"]), "perlu_rinci": perlu_rinci, "perlu_lain": perlu_lain,
                         "alasan": {db.ALASAN_DETAIL_SPSE[k]: n for k, n in alasan.items()},
                         "terakhir_detail": conn.execute("SELECT MAX(diambil_pada) FROM spse_detail WHERE lpse=? AND error IS NULL", (lpse,)).fetchone()[0]}}
+
+
+def data_home(conn, th, bawaan, satker=None):
+    """Data halaman Home (lihat core/home.py). Satker yang bisa dipilih = satker yang data SiRUP-nya ada (hanya itu yang punya kategori MAK)."""
+    dasar, lpse = _konfig_spse()
+    tahun_spse = sorted({r[0] for r in conn.execute("SELECT DISTINCT tahun FROM spse_paket WHERE lpse=? AND jenis='nontender'", (lpse,))}, reverse=True)
+    yang = dasar["tahun"] if bawaan else th
+    tahun_list = tahun_spse if yang == "semua" else [int(yang)]
+    h = home.hitung(conn, lpse, tahun_list, satker_sirup(), satker)
+    h.update(tahun=tahun_spse, tahun_bawaan=dasar["tahun"], tahun_dipilih=yang, satker=satker, satker_daftar=sorted(satker_sirup()), lpse=lpse)
+    return h
 
 
 def data_banding(conn, th, bawaan, satker=None):
@@ -381,7 +427,8 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             if u.path == "/api/tugas/mulai":
                 try:
                     tugas.mulai(body.get("jenis"), body.get("tahun"), body.get("koneksi", 1), body.get("jeda", 1.5),
-                                body.get("usia_hari", 7), bool(body.get("semua")), body.get("id_satker"), body.get("satker"), body.get("target"))
+                                body.get("usia_hari", 7), bool(body.get("semua")), body.get("id_satker"), body.get("satker"), body.get("target"),
+                                body.get("opsi"))
                 except RuntimeError as e:
                     return self._json(409, {"error": str(e)})
                 except (ValueError, TypeError) as e:
@@ -529,7 +576,11 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
             nama_target = q.get("target", [None])[0] or None
             kunci = (u.path, str(th), nama_target)
             if u.path == "/":
+                return self._kirim(200, "text/html; charset=utf-8", Path(__file__).with_name("home.html").read_bytes())
+            if u.path == "/sirup":
                 return self._kirim(200, "text/html; charset=utf-8", HTML.read_bytes())
+            if u.path == "/api/home":
+                return self._api(kunci + (_param_satker(q),), lambda conn: (200, data_home(conn, th, q.get("tahun") is None, _param_satker(q))))
             if u.path == "/grafik":
                 return self._kirim(200, "text/html; charset=utf-8", HTML_GRAFIK.read_bytes())
             if u.path in HALAMAN_STATIS:
@@ -541,6 +592,10 @@ def buat_handler(db_path, tahun_default=None, tugas=None):
                 return self._excel_banding(q, th)
             if u.path == "/api/spse/jadwal":
                 return self._jadwal_spse(q)
+            if u.path == "/perintah":
+                return self._kirim(200, "text/html; charset=utf-8", Path(__file__).with_name("perintah.html").read_bytes())
+            if u.path == "/api/perintah":
+                return self._json(200, {"perintah": _perintah.metadata(), "tahun_bawaan": tahun_default or muat_target(None, None)[1]["tahun"]})
             if u.path == "/api/satker":
                 return self._api(("satker", nama_target), lambda conn: (200, data_satker(conn)))
             if u.path == "/api/satker/cari":

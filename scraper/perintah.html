@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pusat Perintah</title>
+<link rel="stylesheet" href="/gaya.css">
+<style>
+  .grup-judul { font-weight: 650; font-size: 15px; margin: 22px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: 12.5px; }
+  .kartu { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .kartu.bahaya { border-color: var(--err); }
+  .kartu h3 { margin: 0 0 4px; font-size: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .kartu p { margin: 6px 0; }
+  .kartu .meta { color: var(--muted); font-size: 12.5px; }
+  .kartu .meta b { color: var(--text); font-weight: 600; }
+  .param { display: flex; gap: 10px 16px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .belum { color: var(--warn); font-size: 12.5px; }
+  #aktif { position: sticky; top: 0; z-index: 5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Halaman"><a href="/">Home</a><a href="/sirup">SiRUP</a><a href="/spse">SPSE (LPSE)</a><a href="/banding">Perbandingan SiRUP ↔ SPSE</a><a class="aktif" href="/perintah">Pusat Perintah</a></nav>
+  <header>
+    <div>
+      <h1>Pusat Perintah</h1>
+      <div class="sub">Semua perintah aplikasi dalam satu halaman, dengan penjelasan fungsinya. Satu perintah berjalan pada satu waktu; yang sudah mulai tetap berjalan walau halaman ditutup.</div>
+    </div>
+  </header>
+  <div class="note err" id="basi" hidden><b>Kode aplikasi sudah diperbarui</b> sejak dashboard ini dijalankan. Tutup jendela Terminal "Buka Dashboard", lalu klik <b>Buka Dashboard.command</b> lagi.</div>
+  <section class="ambil" id="aktif" aria-live="polite">
+    <div id="aktif-judul"><b>Belum ada perintah yang berjalan.</b></div>
+    <div id="aktif-bar"></div>
+    <div class="aksi"><button class="btn bahaya" id="henti" disabled>Hentikan</button><span class="sub" id="aktif-info"></span></div>
+    <pre class="log" id="log" hidden></pre>
+  </section>
+  <div id="isi"></div>
+  <p class="sub" style="margin-top:24px">Catatan: web publik tidak punya tombol ini. Pengambilan data selalu dijalankan dari komputer Anda; web publik hanya membaca hasil yang diterbitkan ke Supabase.</p>
+</div>
+<script src="/bersama.js"></script>
+<script>
+let P = [], tahunBawaan = new Date().getFullYear(), sibuk = false, poll = null;
+const TAG = { "Lokal": "info", "Supabase": "tayang", "Web publik": "tayang", "Cloudflare": "peringatan" };
+const NAMA_STATUS_ID = { berjalan: "Berjalan", selesai: "Selesai", gagal: "Gagal", dihentikan: "Dihentikan" };
+
+function kontrol(p, par) {
+  const id = `${p.id}__${par.k}`;
+  if (par.tipe === "cek") return `<label class="flab"><input type="checkbox" id="${id}" ${par.bawaan ? "checked" : ""}> ${esc(par.label)}</label>`;
+  if (par.tipe === "pilih") return `<label class="flab">${esc(par.label)}<select id="${id}">${par.opsi.map((o) => `<option ${Number(o) === Number(par.bawaan) ? "selected" : ""}>${o}</option>`).join("")}</select></label>`;
+  const sk = new Date().getFullYear(), th = Array.from({ length: 8 }, (_, i) => sk - i);
+  return `<label class="flab">${esc(par.label)}<select id="${id}">${th.map((y) => `<option ${y === tahunBawaan ? "selected" : ""}>${y}</option>`).join("")}${par.semua ? '<option value="semua">Semua tahun</option>' : ""}</select></label>`;
+}
+function gambar() {
+  const urutan = [];
+  P.forEach((p) => { if (!urutan.includes(p.kelompok)) urutan.push(p.kelompok); });
+  $("isi").innerHTML = urutan.map((g) => `<div class="grup-judul">${esc(g)}</div>` + P.filter((p) => p.kelompok === g).map((p) => `
+    <div class="kartu ${p.bahaya ? "bahaya" : ""}" data-id="${p.id}">
+      <h3>${esc(p.nama)} ${p.mengubah.map((m) => `<span class="tag ${TAG[m.split(" (")[0]] || ""}">mengubah: ${esc(m)}</span>`).join(" ")}${p.bahaya ? ' <span class="tag salah">hati-hati</span>' : ""}</h3>
+      <p>${esc(p.fungsi)}</p>
+      <p class="meta"><b>Kapan dipakai:</b> ${esc(p.kapan)} &nbsp;·&nbsp; <b>Perkiraan waktu:</b> ${esc(p.waktu)}</p>
+      ${p.param.length ? `<div class="param">${p.param.map((x) => kontrol(p, x)).join("")}</div>` : ""}
+      <div class="aksi"><button class="btn ${p.bahaya ? "bahaya" : "utama"}" data-jalan="${p.id}" ${p.siap ? "" : "disabled"}>Jalankan</button>
+        ${p.siap ? "" : `<span class="belum">Belum siap: ${esc(p.alasan_belum_siap)}</span>`}</div>
+    </div>`).join("")).join("");
+  tombol();
+}
+function tombol() { document.querySelectorAll("[data-jalan]").forEach((b) => { const p = P.find((x) => x.id === b.dataset.jalan); b.disabled = sibuk || !p.siap; }); }
+function nilai(p, par) {
+  const el = $(`${p.id}__${par.k}`);
+  if (par.tipe === "cek") return el.checked;
+  if (par.tipe === "pilih") return Number(el.value);
+  return el.value === "semua" ? "semua" : parseInt(el.value, 10);
+}
+async function jalankan(id) {
+  const p = P.find((x) => x.id === id), v = {};
+  p.param.forEach((par) => { v[par.k] = nilai(p, par); });
+  if (p.bahaya && !confirm(`${p.nama}\n\n${p.fungsi}\n\nLanjutkan?`)) return;
+  const badan = p.jenis === "perintah" ? { jenis: "perintah", opsi: { id, opsi: v } }
+    : { jenis: p.jenis, tahun: v.tahun ?? tahunBawaan, koneksi: v.koneksi || 1, jeda: v.jeda || 1.5, usia_hari: 7, semua: !!v.semua, satker: p.jenis === "daftar" ? undefined : "__semua" };
+  try {
+    const r = await postTugas("/api/tugas/mulai", badan), j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    tampil(j); mulaiPoll();
+  } catch (e) { $("aktif-judul").innerHTML = `<div class="note err">${esc(e.message)}</div>`; }
+}
+function tampil(t) {
+  const jalan = t.status === "berjalan"; sibuk = jalan; tombol();
+  $("henti").disabled = !jalan;
+  if (t.status === "idle") { $("aktif-judul").innerHTML = "<b>Belum ada perintah yang berjalan.</b>"; $("log").hidden = true; $("aktif-bar").innerHTML = ""; $("aktif-info").textContent = ""; return; }
+  const id = String(t.jenis || "").replace(/^perintah:/, ""), nama = (P.find((x) => x.id === id) || P.find((x) => x.jenis === t.jenis) || {}).nama || t.jenis;
+  const tag = { berjalan: "info", selesai: "tayang", gagal: "gagal", dihentikan: "belum" }[t.status];
+  $("aktif-judul").innerHTML = `<b>${esc(nama)}</b> <span class="tag ${tag}">${NAMA_STATUS_ID[t.status] || t.status}</span>` + (t.tahap_ke && t.tahap_total > 1 ? ` · tahap ${t.tahap_ke}/${t.tahap_total}: ${esc(t.tahap_nama)}` : "");
+  const persen = t.total ? Math.round(t.selesai * 100 / t.total) : 0;
+  $("aktif-bar").innerHTML = t.total ? `<div class="progress"><i style="width:${persen}%"></i></div>` : (jalan ? `<div class="sub">Sedang bekerja…</div>` : "");
+  $("aktif-info").textContent = (t.total ? `${t.selesai}/${t.total}` : "") + (jalan && t.sisa_detik != null ? ` · sisa ${durasi(t.sisa_detik)}` : "") + (t.lama_detik != null && !jalan ? `Lama ${durasi(t.lama_detik)}` : "");
+  $("log").hidden = false; $("log").textContent = (t.log || []).slice(-30).join("\n"); $("log").scrollTop = $("log").scrollHeight;
+}
+async function cek() {
+  try {
+    const t = await ambilJSON("/api/tugas"); $("basi").hidden = !t.kode_basi; tampil(t);
+    if (t.status !== "berjalan" && poll) { clearInterval(poll); poll = null; }
+  } catch (e) {}
+}
+function mulaiPoll() { if (!poll) poll = setInterval(cek, 1000); }
+$("isi").addEventListener("click", (e) => { const b = e.target.closest("[data-jalan]"); if (b) jalankan(b.dataset.jalan); });
+$("henti").addEventListener("click", () => postTugas("/api/tugas/henti").then(cek));
+(async () => {
+  const j = await ambilJSON("/api/perintah"); P = j.perintah; tahunBawaan = j.tahun_bawaan; gambar();
+  await cek(); if (sibuk) mulaiPoll();
+  setInterval(() => { if (!poll && !document.hidden) cek(); }, 10000);
+})();
+</script>
+</body>
+</html>

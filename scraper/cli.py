@@ -1,6 +1,7 @@
 """CLI:  python -m scraper spse nontender | ambil sirup | run sirup | detail sirup | lokasi | periksa | web | events"""
 import argparse
 import json
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -122,6 +123,21 @@ def cmd_tarik(args):
         print(f"TIDAK DITARIK: {e}")
         return 1
     print(f"Database lokal dibangun dari Supabase: {sum(jumlah.values())} baris di {len(jumlah)} tabel.")
+    return 0
+
+
+def cmd_impor_mak(args):
+    from .core import mak_ref
+    conn = db.buka(args.db)
+    try:
+        r = mak_ref.impor(conn, args.berkas)
+        n = mak_ref.isi_sub_kegiatan(conn)
+    except sqlite3.Error as e:
+        print(f"GAGAL membaca database MAK: {e}")
+        return 1
+    ada = conn.execute("SELECT COUNT(*) FROM sirup_detail WHERE sub_kegiatan_nama IS NOT NULL").fetchone()[0]
+    tak = conn.execute("SELECT COUNT(*) FROM sirup_detail WHERE sub_kegiatan_kode IS NOT NULL AND sub_kegiatan_nama IS NULL").fetchone()[0]
+    print(f"Field Sub Kegiatan diisi untuk {n} paket: {ada} ada namanya, {tak} belum diketahui (kode ada, tidak ada di referensi).")
     return 0
 
 
@@ -247,6 +263,9 @@ def main(argv=None):
     tb.add_argument("--keluar", help="folder halaman publik (default: publik/)")
     tb.add_argument("--tanpa-excel", action="store_true")
     tb.set_defaults(fn=cmd_terbitkan)
+    im = sub.add_parser("impor-mak", help="impor database MAK/sub kegiatan (kode_mak.db) dan isi field Sub Kegiatan pada paket")
+    im.add_argument("berkas", help="path kode_mak.db")
+    im.set_defaults(fn=cmd_impor_mak)
     ug = sub.add_parser("unggah", help="unggah folder publik/ (salinan publik) ke Cloudflare dengan Wrangler")
     ug.set_defaults(fn=cmd_unggah)
     pb = sub.add_parser("perbarui", help="SATU PERINTAH: ambil data SiRUP + SPSE, periksa RUP, lalu ekspor salinan publik")

@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS spse_detail (
   lengkap INTEGER DEFAULT 0,                          -- 1 = Pemenang + Pemenang Berkontrak + Jadwal (+ riwayat) ikut diambil
   PRIMARY KEY (lpse, jenis, kode_paket)
 );
+CREATE TABLE IF NOT EXISTS ref_sub_kegiatan (                    -- nomenklatur sub kegiatan (SIPD), diimpor dari database MAK pengguna
+  kode_sub_kegiatan TEXT PRIMARY KEY, nama_sub_kegiatan TEXT,
+  kode_kegiatan TEXT, nama_kegiatan TEXT, kode_program TEXT, nama_program TEXT, kode_bidang TEXT, nama_bidang TEXT,
+  kode_unit TEXT, nama_unit TEXT, sumber TEXT);
+CREATE TABLE IF NOT EXISTS ref_mak (
+  kode_mak_full TEXT PRIMARY KEY, kode_sub_kegiatan TEXT, kode_rekening TEXT, nama_rekening TEXT, kategori_belanja TEXT);
 CREATE TABLE IF NOT EXISTS sirup_foto (                         -- foto harian daftar RUP aktif per satker & tahun (satu foto per hari; foto hari yang sama diganti)
   tanggal TEXT NOT NULL, kode_rup TEXT NOT NULL, tahun INTEGER, id_satker INTEGER,
   nama_paket TEXT, pagu NUMERIC, metode_pemilihan TEXT, sumber_dana TEXT,
@@ -115,6 +121,16 @@ def buka(path=DB_DEFAULT):
         with conn:                                          # detail yang sudah ada: anggap tahapan daftar saat ini = saat diambil
             conn.execute("UPDATE spse_detail SET tahapan_daftar=(SELECT p.tahapan FROM spse_paket p WHERE p.lpse=spse_detail.lpse AND "
                          "p.jenis=spse_detail.jenis AND p.kode_paket=spse_detail.kode_paket) WHERE error IS NULL AND diambil_pada IS NOT NULL")
+    for kol in ("sub_kegiatan_kode", "sub_kegiatan_nama"):        # field Sub Kegiatan pada detail paket (dari MAK; nama dari ref_sub_kegiatan)
+        if kol not in {r[1] for r in conn.execute("PRAGMA table_info(sirup_detail)")}:
+            conn.execute(f"ALTER TABLE sirup_detail ADD COLUMN {kol} TEXT")
+    # nama paket SPSE lama yang memuat sisa HTML (mis. badge 'Pengadaan Langsung Ulang') dibersihkan sekali
+    from ..sources.spse import bersihkan_nama
+    kotor = conn.execute("SELECT lpse, jenis, kode_paket, nama_paket FROM spse_paket WHERE nama_paket LIKE '%<%'").fetchall()
+    if kotor:
+        with conn:
+            conn.executemany("UPDATE spse_paket SET nama_paket=? WHERE lpse=? AND jenis=? AND kode_paket=?",
+                             [(bersihkan_nama(r["nama_paket"]), r["lpse"], r["jenis"], r["kode_paket"]) for r in kotor])
     # spse_detail lama: 'APBD 2026' dalam satu kolom -> sumber_dana 'APBD' + tahun_anggaran 2026
     if "sumber_dana" not in {r[1] for r in conn.execute("PRAGMA table_info(spse_detail)")}:
         conn.execute("ALTER TABLE spse_detail ADD COLUMN sumber_dana TEXT")
@@ -502,6 +518,8 @@ def simpan_detail(conn, run_id, kode, nama, pagu, d):
             (kode, baru["lokasi_ringkas"], json.dumps(d["lokasi"], ensure_ascii=False), baru["volume"], baru["uraian"],
              baru["spesifikasi"], baru["mak"], json.dumps(d["sumber_dana"], ensure_ascii=False), d["total_pagu"],
              baru["extra_json"], pagu, nama, now))
+        from .mak_ref import isi_sub_kegiatan
+        isi_sub_kegiatan(conn, kode)
 
 
 def catat_gagal_detail(conn, kode, pesan):
@@ -545,8 +563,25 @@ def simpan_detail_spse(conn, lpse, jenis, kode, detail=None, error=None, jadwal=
                               t["jumlah_perubahan"], json.dumps(t.get("riwayat") or [], ensure_ascii=False), waktu))
 
 
+# ejaan lain untuk kata yang sama di SPSE (satker yang sama kadang ditulis berbeda antar tahun)
+ALIAS_KATA = {"PEMUKIMAN": "PERMUKIMAN"}
+
+
 def norm_satker(teks):
-    return " ".join((teks or "").upper().split())
+    """Kunci pembanding nama satker: huruf besar, tanda baca dibuang, spasi dirapikan, ejaan lain disatukan.
+    'DINAS PANGAN. PERTANIAN DAN PERIKANAN' == 'Dinas Pangan, Pertanian dan Perikanan';  PEMUKIMAN == PERMUKIMAN."""
+    kata = re.sub(r"[^0-9A-Z]+", " ", (teks or "").upper()).split()
+    return " ".join(ALIAS_KATA.get(k, k) for k in kata)
+
+
+def nama_kanonik(daftar_nama):
+    """{kunci norm_satker: nama tampilan} = penulisan yang paling sering dipakai (seri: yang berkoma/lebih panjang, lalu abjad)."""
+    from collections import Counter
+    hitung = {}
+    for n in daftar_nama:
+        if n:
+            hitung.setdefault(norm_satker(n), Counter())[n.strip()] += 1
+    return {k: sorted(c.items(), key=lambda x: (-x[1], -len(x[0]), x[0]))[0][0] for k, c in hitung.items()}
 
 
 ALASAN_DETAIL_SPSE = {"belum": "belum pernah diambil", "gagal": "gagal diambil sebelumnya", "belum_rinci": "belum dirinci (pemenang/kontrak/jadwal)",

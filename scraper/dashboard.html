@@ -8,7 +8,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="nav" aria-label="Halaman"><a class="aktif" href="/">SiRUP</a><a href="/spse">SPSE (LPSE)</a><a href="/banding">Perbandingan SiRUP ↔ SPSE</a></nav>
+  <nav class="nav" aria-label="Halaman"><a href="/">Home</a><a class="aktif" href="/sirup">SiRUP</a><a href="/spse">SPSE (LPSE)</a><a href="/banding">Perbandingan SiRUP ↔ SPSE</a><a href="/perintah">Pusat Perintah</a></nav>
   <header>
     <div>
       <h1>Rekap RUP — MAK, Uraian, Jalan &amp; Saluran, Database</h1>
@@ -406,7 +406,7 @@ document.addEventListener("click", (e) => {
   if (tr && !e.target.closest("a")) { const id = tr.dataset.id; buka[tab].has(id) ? buka[tab].delete(id) : buka[tab].add(id); isiTabel(); }
 });
 document.addEventListener("change", (e) => {
-  if (e.target.matches("select[data-f]")) aturFilter(e.target.dataset.f, e.target.value);
+  if (e.target.matches("[data-f]")) aturFilter(e.target.dataset.f, e.target.value);
   if (e.target.id === "perhal") { DB.per = parseInt(e.target.value, 10); DB.hal = 0; isiTabel(); }
 });
 function aturFilter(k, v) {
@@ -897,5 +897,6 @@ aturTimer();
 muatSatker();
 muat();
 </script>
+<script src="/filter_ketik.js"></script>
 </body>
 </html>

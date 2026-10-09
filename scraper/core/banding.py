@@ -10,7 +10,7 @@ import json
 import re
 from datetime import datetime
 
-from .db import norm_satker
+from .db import nama_kanonik, norm_satker
 
 TAHAP_TAYANG = "upload dokumen penawaran"
 
@@ -224,6 +224,8 @@ def hitung(conn, lpse, jenis, tahun_list, peta_sirup, satker=None, sekarang=None
     pilih = None if satker in (None, "", "semua") else norm_satker(satker)
     luar = {r["kode_rup"]: dict(r) for r in conn.execute("SELECT * FROM sirup_luar_daftar WHERE error IS NULL")} \
         if conn.execute("SELECT 1 FROM sqlite_master WHERE name='sirup_luar_daftar'").fetchone() else {}
+    kan = nama_kanonik(
+        r[0] for r in conn.execute("SELECT satker FROM spse_detail WHERE satker IS NOT NULL AND error IS NULL"))
     baris, peringatan, ada_spse = [], [], {}
     tanpa_sirup = set()
     for tahun in tahun_list:
@@ -235,13 +237,13 @@ def hitung(conn, lpse, jenis, tahun_list, peta_sirup, satker=None, sekarang=None
         grup = {}
         for p in spse:
             if p["ada_detail"]:
-                grup.setdefault(norm_satker(p["satker"]), (p["satker"], []))[1].append(p)
+                grup.setdefault(norm_satker(p["satker"]), (kan.get(norm_satker(p["satker"]), p["satker"]), []))[1].append(p)
         for k, (nama, lst) in grup.items():
             ada_spse[k] = ada_spse.get(k, (nama, 0))[0], ada_spse.get(k, (nama, 0))[1] + len(lst)
         for k in sorted(set(grup) | set(peta)):
             if pilih is not None and k != pilih:
                 continue
-            nama = grup[k][0] if k in grup else peta[k][0]
+            nama = peta[k][0] if k in peta else grup[k][0]                       # satker ber-SiRUP memakai nama resmi di config
             milik = grup[k][1] if k in grup else []
             if k in peta:
                 baris += _bandingkan(conn, lpse, jenis, tahun, peta[k][1], milik, tanpa_detail, sekarang, nama, luar)

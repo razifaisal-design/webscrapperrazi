@@ -196,7 +196,7 @@ class TestWebTugas(unittest.TestCase):
         conn.execute("INSERT INTO sirup_paket(kode_rup,tahun,id_satker,jenis,nama_paket,pagu,metode_pemilihan,is_active,link) VALUES('55',2026,173394,'penyedia','Paket Uji',1000,'Pengadaan Langsung',1,'l')")
         conn.commit()
         conn.close()
-        for jalur, kata in (("/spse", b"SPSE Non-Tender"), ("/banding", b"Perbandingan"), ("/gaya.css", b"--bg"), ("/bersama.js", b"pasangTugas"), ("/", b"gaya.css")):
+        for jalur, kata in (("/spse", b"SPSE Non-Tender"), ("/banding", b"Perbandingan"), ("/gaya.css", b"--bg"), ("/bersama.js", b"pasangTugas"), ("/", b"Progres Paket PSU"), ("/sirup", b"Rekap RUP"), ("/filter_ketik.js", b"datalist")):
             s, isi = self.minta("GET", jalur)
             self.assertEqual(s, 200, jalur)
             self.assertIn(kata, isi if isinstance(isi, bytes) else json.dumps(isi).encode(), jalur)
@@ -214,6 +214,12 @@ class TestWebTugas(unittest.TestCase):
         self.assertEqual(s, 200)
         r = [x for x in j["baris"] if x["kode_rup"] == "55"][0]
         self.assertEqual((r["status"], r["kode_nontender"], r["pagu_sama"]), ("Sudah tayang", "900", True))
+        s, j = self.minta("GET", "/api/home")
+        self.assertEqual(s, 200)
+        self.assertEqual(set(j["kelompok"]) | {"x"}, {"Jalan PSU", "Saluran PSU", "Semua", "x"})
+        self.assertIn("tahun_berlaku", j)
+        s, j = self.minta("GET", "/api/home?tahun=2025")                              # tahun tanpa aturan kategori: kosong, bukan galat
+        self.assertEqual((s, j["kosong"]), (200, True))
         s, j = self.minta("GET", "/api/spse/jadwal?kode=900")
         self.assertEqual((s, len(j["jadwal"])), (200, 1))
         self.assertEqual(self.minta("GET", "/api/spse/jadwal?kode=abc")[0], 400)

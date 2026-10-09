@@ -26,12 +26,17 @@ class TestEksporPublik(unittest.TestCase):
             self.assertEqual([b["kode_paket"] for b in spse["baris"]], ["900"])
             self.assertEqual(json.loads((keluar / "data" / "jadwal_spse.json").read_text())["900"][0]["tahap"], "Upload Dokumen Penawaran")
             self.assertTrue((keluar / "data" / "spse_2026.xlsx").read_bytes().startswith(b"PK"))
-            for nama in ("index.html", "spse.html", "banding.html", "grafik.html"):
+            home = json.loads((keluar / "data" / "home_2026.json").read_text())
+            self.assertIn("", home)                                                      # semua satker
+            self.assertIn("kelompok", home[""])
+            self.assertTrue((keluar / "data" / "home_semua.json").exists())
+            for nama in ("index.html", "sirup.html", "spse.html", "banding.html", "grafik.html"):
                 h = (keluar / nama).read_text(encoding="utf-8")
                 self.assertIn('<script src="statis.js"></script>', h, nama)
                 self.assertNotIn('"/gaya.css"', h, nama)                          # tautan relatif: bisa di-hosting di sub-folder
                 self.assertNotIn('"/bersama.js"', h, nama)
                 self.assertNotIn('href="/spse"', h, nama)
+                self.assertNotIn('href="/sirup"', h, nama)
             for nama in ("gaya.css", "bersama.js", "statis.js", ".nojekyll"):
                 self.assertTrue((keluar / nama).exists(), nama)
             self.assertNotIn("password", (keluar / "statis.js").read_text().lower())
