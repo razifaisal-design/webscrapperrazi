@@ -4,10 +4,13 @@
 # mencerminkannya kembali (sinkron + terbitkan, otomatis di dalam `perbarui`). Rahasia: secret SUPABASE_DB_URL di pengaturan repo.
 name: Perbarui data
 
+# STATUS (9 Okt 2026): jadwal DIMATIKAN. Uji pertama dari server GitHub: SiRUP dan SPSE membalas 403 (IP server GitHub ditolak).
+# Kita tidak menyiasati pemblokiran. Hidupkan lagi (hapus tanda # di bawah) hanya bila workflow ini dijalankan pada
+# self-hosted runner di jaringan yang diterima (mis. komputer sendiri) -- lihat docs/online.md.
 on:
-  schedule:
-    - cron: "0 17 * * *"
-    - cron: "0 6 * * *"
+  # schedule:
+  #   - cron: "0 17 * * *"
+  #   - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       koneksi:

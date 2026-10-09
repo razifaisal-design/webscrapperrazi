@@ -19,3 +19,11 @@ Setelah online, **Supabase** (cermin) adalah sumber kebenaran. Jangan menjalanka
 
 ## Bila SiRUP/SPSE memblokir server GitHub
 Server GitHub berada di luar negeri; situs pemerintah kadang menolak IP luar negeri. Bila langkah cek akses gagal: pakai VM gratis yang bisa dipilih wilayahnya (mis. Oracle Cloud Always Free, wilayah Singapura/Jakarta bila tersedia) dan jalankan `python -m scraper perbarui` dengan cron di sana, atau tetap jalankan dari komputer sendiri (`Perbarui dan Ekspor Publik.command`).
+
+## Hasil uji (9 Oktober 2026)
+Jalan pertama dari server GitHub: **SiRUP dan SPSE membalas 403** (cek akses gagal) padahal dari komputer/jaringan rumah keduanya 200 dengan permintaan yang sama. Artinya IP pusat data/luar negeri ditolak. Kita **tidak** menyiasatinya (tanpa proxy bergilir atau penyamaran). Jadwal GitHub dimatikan agar tidak gagal tiap hari.
+
+Pilihan yang masih sesuai aturan:
+1. **Jadwal di komputer sendiri** (launchd, 00:00 dan 13:00 WIB): komputer harus menyala/bangun pada jam itu. Web publik tetap online lewat Supabase + Cloudflare.
+2. **Self-hosted runner GitHub di komputer/perangkat rumah** yang selalu menyala: tombol dan jadwal GitHub dipakai, eksekusi memakai IP rumah.
+3. **VM gratis** (mis. Oracle Cloud Always Free): hanya jalan bila IP-nya diterima SiRUP/SPSE; harus diuji dulu (cek akses = 200).

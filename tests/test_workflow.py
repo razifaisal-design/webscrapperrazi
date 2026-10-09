@@ -7,7 +7,9 @@ YML = (Path(__file__).resolve().parents[1] / ".github" / "workflows" / "perbarui
 
 class TestWorkflow(unittest.TestCase):
     def test_jadwal_00_dan_13_wib(self):
-        self.assertEqual(re.findall(r'- cron: "([^"]+)"', YML), ["0 17 * * *", "0 6 * * *"])          # UTC: 17:00 = 00:00 WIB, 06:00 = 13:00 WIB
+        # jadwal sengaja dimatikan (di-komentari) karena server GitHub ditolak SiRUP/SPSE (403); definisinya dijaga agar siap dihidupkan lagi
+        self.assertEqual(re.findall(r'#\s+- cron: "([^"]+)"', YML), ["0 17 * * *", "0 6 * * *"])          # UTC: 17:00 = 00:00 WIB, 06:00 = 13:00 WIB
+        self.assertEqual(re.findall(r'^\s+- cron:', YML, flags=re.M), [])                                  # tidak ada jadwal aktif yang akan gagal berulang
 
     def test_aman(self):
         self.assertIn("permissions:\n  contents: read", YML)
