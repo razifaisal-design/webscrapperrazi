@@ -41,6 +41,8 @@ jobs:
       - name: Pasang pustaka
         run: pip install -r requirements.txt
       - name: Tes otomatis
+        env:
+          SUPABASE_DB_URL: ""        # tes tidak boleh menyentuh Supabase asli maupun mencetak rahasia ke log
         run: python -m unittest discover -s tests -q
       - name: Cek akses ke SiRUP dan SPSE dari server GitHub
         run: |

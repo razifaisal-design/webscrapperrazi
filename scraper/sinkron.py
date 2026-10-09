@@ -35,7 +35,7 @@ def muat_env(path=None):
             if baris and not baris.startswith("#") and "=" in baris:
                 k, v = baris.split("=", 1)
                 nilai[k.strip()] = v.strip().strip('"').strip("'")
-    return {**nilai, **{k: v for k, v in os.environ.items() if k.startswith("SUPABASE_")}}
+    return {**nilai, **{k: v for k, v in os.environ.items() if k.startswith("SUPABASE_") and v}}      # variabel lingkungan KOSONG tidak menimpa .env
 
 
 def url_db(path=None):

@@ -133,9 +133,17 @@ class TestSinkron(unittest.TestCase):
         self.assertEqual(dipanggil, [])
 
     def test_muat_env(self):
+        import os
+        from unittest import mock
         env = Path(self.tmp.name) / ".env"
         env.write_text('# komentar\nSUPABASE_DB_URL="postgresql://u:p@h/db"\nLAIN=1\n', encoding="utf-8")
-        self.assertEqual(sinkron.muat_env(env)["SUPABASE_DB_URL"], "postgresql://u:p@h/db")
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("SUPABASE_DB_URL", None)                    # uji tidak boleh bergantung pada lingkungan (mis. secret di CI)
+            self.assertEqual(sinkron.muat_env(env)["SUPABASE_DB_URL"], "postgresql://u:p@h/db")
+        with mock.patch.dict(os.environ, {"SUPABASE_DB_URL": "dari-lingkungan"}):
+            self.assertEqual(sinkron.muat_env(env)["SUPABASE_DB_URL"], "dari-lingkungan")      # lingkungan menang atas .env
+        with mock.patch.dict(os.environ, {"SUPABASE_DB_URL": ""}):
+            self.assertEqual(sinkron.muat_env(env)["SUPABASE_DB_URL"], "postgresql://u:p@h/db")   # kosong tidak menimpa
 
 
 if __name__ == "__main__":
