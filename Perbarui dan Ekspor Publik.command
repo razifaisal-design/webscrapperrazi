@@ -39,6 +39,7 @@ echo "Tahun: ${TAHUN:-config} | koneksi $K | jeda $J detik | unggah: ${UNGGAH:-t
 if [ ! -x .venv/bin/python ]; then
   python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
 fi
+.venv/bin/pip install -q -r requirements.txt 2>/dev/null
 .venv/bin/python -m scraper perbarui $OPT --koneksi $K --jeda $J $UNGGAH
 KODE=$?
 [ -n "$UNGGAH" ] && [ $KODE -eq 0 ] && touch data/.pernah_unggah

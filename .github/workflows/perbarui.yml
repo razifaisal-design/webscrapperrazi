@@ -1,0 +1,61 @@
+# Pembaruan otomatis penuh online: ambil data SiRUP + SPSE, periksa RUP, cadangkan & terbitkan ke Supabase.
+# Jadwal (cron memakai UTC; WIB = UTC+7):  00:00 WIB = 17:00 UTC (hari sebelumnya)   13:00 WIB = 06:00 UTC
+# Database tidak disimpan di GitHub: tiap jalan dimulai dari cermin di Supabase (python -m scraper tarik) dan diakhiri dengan
+# mencerminkannya kembali (sinkron + terbitkan, otomatis di dalam `perbarui`). Rahasia: secret SUPABASE_DB_URL di pengaturan repo.
+name: Perbarui data
+
+on:
+  schedule:
+    - cron: "0 17 * * *"
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      koneksi:
+        description: "Jumlah koneksi untuk detail (1-5)"
+        default: "2"
+      jeda:
+        description: "Jeda tiap koneksi (detik)"
+        default: "1.5"
+
+# satu jalan pada satu waktu: dua jalan yang tumpang tindih akan saling menimpa cermin
+concurrency:
+  group: perbarui-data
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  perbarui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Pasang pustaka
+        run: pip install -r requirements.txt
+      - name: Tes otomatis
+        run: python -m unittest discover -s tests -q
+      - name: Cek akses ke SiRUP dan SPSE dari server GitHub
+        run: |
+          set -u
+          gagal=0
+          for u in "https://sirup.inaproc.id/sirup/home/penyediaSatker?idSatker=173394" "https://spse.inaproc.id/pontianak/nontender"; do
+            kode=$(curl -sS -m 40 -o /dev/null -w "%{http_code}" -A "Mozilla/5.0 (pantau-pengadaan; riset data publik)" "$u" || echo 000)
+            echo "$kode  $u"
+            case "$kode" in 200) ;; *) gagal=1 ;; esac
+          done
+          if [ "$gagal" = 1 ]; then
+            echo "::error::SiRUP/SPSE tidak bisa dijangkau dari server GitHub (kemungkinan IP server luar negeri diblokir). Lihat docs/online.md untuk alternatif."
+            exit 1
+          fi
+      - name: Pulihkan database dari Supabase
+        run: python -m scraper tarik
+      - name: Ambil data, periksa RUP, cadangkan dan terbitkan
+        run: python -m scraper perbarui --koneksi "${{ inputs.koneksi || '2' }}" --jeda "${{ inputs.jeda || '1.5' }}"

@@ -200,6 +200,8 @@ def run_daftar(conn, target, jeda=1.5, force=False, ekspor=True, log=print, buat
     else:
         log(f"Perubahan: {r['revisi']} REVISI RUP (nama sama, kode berganti), {r['baru']} baru, {r['berubah']} berubah, "
             f"{r['hilang']} hilang, {r['muncul_kembali']} muncul kembali")
+        if r.get("revisi_lintas"):
+            log(f"             + {r['revisi_lintas']} revisi RUP yang terpotong antar pengambilan (RUP lama hilang di pengambilan sebelumnya) kini dipasangkan.")
     if ekspor:
         log(f"CSV : {ekspor_lengkap(conn, target)}")
     return 0
@@ -635,9 +637,15 @@ def kode_rup_tak_berpasangan(conn, tahun_list=None, satker=None):
     h = banding.hitung(conn, lpse, "nontender", tahun_list, konfig.satker_sirup(), satker)
     kode = []
     for b in h["baris"]:
-        # dicek: yang tak berpasangan, dan yang hanya cocok lewat NAMA (RUP yang disebut SPSE bisa saja RUP lain berbeda pagu)
-        if b["status"] == "Tidak ada di daftar SiRUP" or str(b.get("kecocokan") or "").startswith("Nama paket + instansi"):
-            kode += [k.strip() for k in (b.get("kode_rup_spse") or "").split(",") if k.strip()]
+        if b["status"] == "SiRUP satker ini belum diambil":          # satker tanpa data SiRUP: tidak ada yang dibandingkan, jangan buka RUP-nya
+            continue
+        kode += [k.strip() for k in (b.get("kode_rup_spse") or "").split(",") if k.strip()]
+    # yang perlu dibuka: kode RUP yang disebut SPSE tetapi tidak ada sama sekali di daftar SiRUP (aktif maupun tidak aktif);
+    # termasuk RUP tambahan pada paket yang sebagian RUP-nya ada di daftar, dan paket yang cocok hanya lewat nama
+    ada = {k for (k,) in conn.execute("SELECT kode_rup FROM sirup_paket")}
+    nama_cocok = {k.strip() for b in h["baris"] if str(b.get("kecocokan") or "").startswith("Nama paket + instansi") and b["status"] != "SiRUP satker ini belum diambil"
+                  for k in (b.get("kode_rup_spse") or "").split(",") if k.strip()}
+    kode = [k for k in kode if k not in ada or k in nama_cocok]
     return list(dict.fromkeys(kode))
 
 
@@ -729,13 +737,14 @@ def run_periksa_rup(conn, kodes, koneksi=1, jeda=1.5, ulang=False, log=print, bu
 
 # ======================= satu perintah: ambil semua data -> periksa RUP -> ekspor publik =======================
 def run_perbarui(conn, db_path, tahun=None, koneksi=1, jeda=1.5, usia_hari=7, rinci="semua", satker=None, periksa=True, ekspor=True,
-                 keluar=None, unggah=False, log=print, berhenti=None):
+                 keluar=None, unggah=False, sinkron=None, log=print, berhenti=None):
     """Alur lengkap seperti yang dilakukan di dashboard, lalu salinan publik:
       1. SiRUP: daftar RUP + detail untuk tiap satker terdaftar (atau hanya `satker`);
       2. SPSE Non-Tender: daftar + detail (`rinci` = cakupan rincian: 'semua' | 'tidak' | nama satker);
       3. periksa langsung ke SiRUP kode RUP yang tidak ada di daftar satker;
       4. ekspor salinan publik (hanya baca) ke `keluar`;
-      5. (opsional, `unggah`) unggah salinan itu ke Cloudflare dengan Wrangler.
+      5. (opsional, `unggah`) unggah salinan itu ke Cloudflare dengan Wrangler;
+      6. cerminkan database lokal ke Supabase (cadangan): `sinkron` None = otomatis bila SUPABASE_DB_URL ada di .env, True = wajib, False = lewati.
     Diblokir (kode 2) menghentikan semuanya; kegagalan lain dicatat dan alur dilanjutkan. Return kode terburuk (0 bila semua baik)."""
     cek_param(koneksi, jeda)
     berhenti = berhenti or threading.Event()
@@ -770,12 +779,36 @@ def run_perbarui(conn, db_path, tahun=None, koneksi=1, jeda=1.5, usia_hari=7, ri
         kodes = kode_rup_tak_berpasangan(conn, [int(dasar["tahun"])])
         log(f"=== Periksa RUP ke SiRUP: {len(kodes)} kode RUP tidak ada di daftar satker ===")
         henti = catat("Periksa RUP", run_periksa_rup(conn, kodes, koneksi=koneksi, jeda=jeda, log=log, berhenti=berhenti))
+    if not (2 in hasil.values()) and not berhenti.is_set() and sinkron is not False:
+        from . import sinkron as _sinkron
+        # otomatis HANYA untuk database utama proyek: database lain (mis. uji coba) tidak boleh menimpa cermin di Supabase
+        utama = Path(db_path).resolve() == db.DB_DEFAULT.resolve()
+        if sinkron is True or (utama and _sinkron.url_db()):
+            log("=== Cadangan ke Supabase ===")
+            try:
+                jumlah = _sinkron.sinkron(db_path, log=log)
+                log(f"Supabase dicerminkan: {sum(jumlah.values())} baris di {len(jumlah)} tabel.")
+                hasil["Cadangan Supabase"] = 0
+            except _sinkron.SinkronError as e:
+                log(f"[TIDAK TERCADANG] {e}")
+                hasil["Cadangan Supabase"] = 1
+        else:
+            log("(Cadangan Supabase dilewati: SUPABASE_DB_URL belum diisi di .env)")
     if ekspor and not berhenti.is_set() and hasil.get("SPSE Non-Tender", 0) != 2:
-        from . import ekspor_publik
         log("=== Ekspor salinan publik ===")
         try:
-            r = ekspor_publik.ekspor(db_path, keluar or (konfig.ROOT / "publik"), log=log)
-            log(f"Salinan publik: {r['berkas']} berkas, {r['ukuran_mb']} MB di {keluar or (konfig.ROOT / 'publik')}")
+            from . import ekspor_publik
+            from . import sinkron as _sk
+            kfg = ekspor_publik.muat_konfig_publik()
+            url = _sk.url_db()
+            utama = Path(db_path).resolve() == db.DB_DEFAULT.resolve()
+            target_keluar = keluar or (konfig.ROOT / "publik")
+            if kfg and url and utama:                       # web publik membaca data langsung dari Supabase; folder publik/ hanya halaman kecil
+                r = ekspor_publik.terbitkan(db_path, target_keluar, url, kfg, log=log)
+                log(f"Data diterbitkan ke Supabase ({r['berkas']} berkas); halaman publik: {r['ukuran_mb']} MB di {target_keluar}")
+            else:
+                r = ekspor_publik.ekspor(db_path, target_keluar, log=log)
+                log(f"Salinan publik (statis, memuat data): {r['berkas']} berkas, {r['ukuran_mb']} MB di {target_keluar}")
             hasil["Ekspor publik"] = 0
         except Exception as e:
             log(f"[GAGAL] ekspor publik: {e!r}")

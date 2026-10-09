@@ -1,0 +1,5 @@
+{
+  "catatan": "Web publik membaca data langsung dari Supabase (tabel publik_berkas, hanya-baca). 'kunci_publikasi' = kunci publishable (anon) yang MEMANG dirancang untuk dipakai di halaman publik; BUKAN kata sandi dan tidak memberi akses tulis. Kata sandi database ada di .env (tidak ikut git).",
+  "supabase_url": "https://tihudtqxlzjdgllorpwl.supabase.co",
+  "kunci_publikasi": "sb_publishable_r8I-UGBTi-18pFbVkH50WQ_OxEuiexp"
+}

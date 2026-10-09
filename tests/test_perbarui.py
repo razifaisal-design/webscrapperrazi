@@ -37,6 +37,13 @@ class TestPerbarui(unittest.TestCase):
             p = mock.patch.object(tugas, nama, fn)
             p.start()
             self.addCleanup(p.stop)
+        p = mock.patch("scraper.sinkron.url_db", lambda *a, **k: None)         # uji tidak boleh menyentuh Supabase sungguhan
+        p.start()
+        self.addCleanup(p.stop)
+        self.sinkron_dipanggil = []
+        p = mock.patch("scraper.sinkron.sinkron", lambda *a, **k: self.sinkron_dipanggil.append(a) or {"t": 1})
+        p.start()
+        self.addCleanup(p.stop)
         p = mock.patch("scraper.ekspor_publik.ekspor", ekspor)
         p.start()
         self.addCleanup(p.stop)
@@ -91,6 +98,17 @@ class TestPerbarui(unittest.TestCase):
             kode, logs = self.jalan(unggah=True)
             self.assertEqual(kode, 1)                                          # tidak terunggah = ada catatan, bukan sukses diam-diam
             self.assertTrue(any("TIDAK TERUNGGAH" in x for x in logs))
+
+    def test_sinkron_supabase_aturan_aman(self):
+        self.jalan(periksa=False, ekspor=False)
+        self.assertEqual(self.sinkron_dipanggil, [])                              # database uji + tanpa URL: tidak menyinkron
+        with mock.patch("scraper.sinkron.url_db", lambda *a, **k: "postgresql://x"):
+            self.jalan(periksa=False, ekspor=False)
+            self.assertEqual(self.sinkron_dipanggil, [])                          # URL ada, tetapi bukan database utama proyek: tetap tidak
+            self.jalan(periksa=False, ekspor=False, sinkron=True)
+            self.assertEqual(len(self.sinkron_dipanggil), 1)                      # hanya bila diminta eksplisit
+            kode, logs = self.jalan(periksa=False, ekspor=False, sinkron=False)
+            self.assertEqual(len(self.sinkron_dipanggil), 1)
 
     def test_satker_tidak_terdaftar_ditolak(self):
         with self.assertRaises(ValueError):

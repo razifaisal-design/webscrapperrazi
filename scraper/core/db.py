@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS spse_detail (
   lengkap INTEGER DEFAULT 0,                          -- 1 = Pemenang + Pemenang Berkontrak + Jadwal (+ riwayat) ikut diambil
   PRIMARY KEY (lpse, jenis, kode_paket)
 );
+CREATE TABLE IF NOT EXISTS sirup_foto (                         -- foto harian daftar RUP aktif per satker & tahun (satu foto per hari; foto hari yang sama diganti)
+  tanggal TEXT NOT NULL, kode_rup TEXT NOT NULL, tahun INTEGER, id_satker INTEGER,
+  nama_paket TEXT, pagu NUMERIC, metode_pemilihan TEXT, sumber_dana TEXT,
+  PRIMARY KEY (tanggal, kode_rup)
+);
+CREATE INDEX IF NOT EXISTS ix_foto_satker ON sirup_foto(id_satker, tahun, tanggal);
 CREATE TABLE IF NOT EXISTS sirup_luar_daftar (                  -- RUP yang dirujuk SPSE tetapi tidak ada di daftar satker; dicek langsung lewat kode RUP
   kode_rup TEXT PRIMARY KEY, ditemukan INTEGER,                  -- 1 = halaman detail RUP ada; 0 = SiRUP tidak punya RUP itu
   nama_paket TEXT, satker_nama TEXT, klpd_nama TEXT, tahun_anggaran TEXT, pagu NUMERIC, metode_pemilihan TEXT,
@@ -205,6 +211,60 @@ def _norm(nama):
     return " ".join((nama or "").lower().split())
 
 
+def simpan_foto(conn, paket, id_satker, tahun, tanggal=None):
+    """Simpan foto daftar RUP hari ini (mengganti foto hari yang sama untuk satker & tahun ini). Dipanggil di dalam transaksi finalisasi."""
+    tanggal = tanggal or datetime.now().strftime("%Y-%m-%d")
+    conn.execute("DELETE FROM sirup_foto WHERE tanggal=? AND id_satker=? AND tahun=?", (tanggal, id_satker, tahun))
+    conn.executemany(
+        "INSERT OR REPLACE INTO sirup_foto(tanggal,kode_rup,tahun,id_satker,nama_paket,pagu,metode_pemilihan,sumber_dana) VALUES(?,?,?,?,?,?,?,?)",
+        [(tanggal, p["kode_rup"], tahun, id_satker, p["nama_paket"], p["pagu"], p["metode_pemilihan"], p["sumber_dana"]) for p in paket])
+    return len(paket)
+
+
+def pasangkan_revisi_lintas_run(conn, run_id, id_satker, tahun, jendela_hari=14, toleransi_pagu=0.10, sekarang=None):
+    """REVISI RUP yang TERPOTONG antar pengambilan: RUP lama hilang di satu pengambilan, RUP baru bernama sama muncul di pengambilan
+    berikutnya (dalam `jendela_hari`). Syarat pasangan: nama sama DAN (pagu sama / selisih <= `toleransi_pagu` ATAU 12 segmen MAK sama).
+    Yang sudah berpasangan tidak disentuh. Event BARU/HILANG dari pasangan itu diganti satu event REVISI_RUP, sama seperti revisi dalam satu pengambilan.
+    -> jumlah pasangan baru."""
+    now = sekarang or datetime.now()
+    batas = (now - timedelta(days=jendela_hari)).isoformat(timespec="seconds")
+    awal = conn.execute("SELECT MIN(selesai) FROM scrape_runs WHERE sumber='SIRUP' AND id_satker=? AND tahun=? AND status='success'", (id_satker, tahun)).fetchone()[0]
+    if not awal:
+        return 0
+    hilang = conn.execute("SELECT * FROM sirup_paket WHERE id_satker=? AND tahun=? AND is_active=0 AND kode_rup_pengganti IS NULL AND last_seen>=?",
+                          (id_satker, tahun, batas)).fetchall()
+    baru = conn.execute("SELECT * FROM sirup_paket WHERE id_satker=? AND tahun=? AND is_active=1 AND kode_rup_sebelumnya IS NULL "
+                        "AND first_seen>=? AND first_seen>?", (id_satker, tahun, batas, awal)).fetchall()      # bukan paket data dasar
+    if not hilang or not baru:
+        return 0
+    mak = {r[0]: mak_inti(r[1]) if r[1] else None for r in conn.execute("SELECT kode_rup, mak FROM sirup_detail WHERE error IS NULL")}
+    kand = {}
+    for h in hilang:
+        kand.setdefault(_norm(h["nama_paket"]), []).append(h)
+    pasangan = 0
+    for b in sorted(baru, key=lambda r: r["kode_rup"]):
+        daftar = [h for h in kand.get(_norm(b["nama_paket"]), []) if h["last_seen"] <= b["first_seen"] or True]
+        cocok = []
+        for h in daftar:
+            pb, ph = b["pagu"] or 0, h["pagu"] or 0
+            pagu_ok = pb == ph or (max(pb, ph) > 0 and abs(pb - ph) / max(pb, ph) <= toleransi_pagu)
+            mak_ok = bool(mak.get(b["kode_rup"])) and mak.get(b["kode_rup"]) == mak.get(h["kode_rup"])
+            if pagu_ok or mak_ok:
+                cocok.append(h)
+        if not cocok:
+            continue
+        h = min(cocok, key=lambda x: abs((x["pagu"] or 0) - (b["pagu"] or 0)))
+        kand[_norm(h["nama_paket"])].remove(h)
+        conn.execute("DELETE FROM paket_events WHERE kunci IN (?,?) AND jenis_event IN ('BARU','HILANG') AND sumber='SIRUP'", (b["kode_rup"], h["kode_rup"]))
+        conn.execute("INSERT INTO paket_events(run_id,sumber,kunci,nama_paket,jenis_event,field,nilai_lama,nilai_baru,selisih,waktu) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                     (run_id, "SIRUP", b["kode_rup"], b["nama_paket"], "REVISI_RUP", "kode_rup", h["kode_rup"], b["kode_rup"],
+                      (b["pagu"] or 0) - (h["pagu"] or 0), now.isoformat(timespec="seconds")))
+        conn.execute("UPDATE sirup_paket SET kode_rup_sebelumnya=? WHERE kode_rup=?", (h["kode_rup"], b["kode_rup"]))
+        conn.execute("UPDATE sirup_paket SET kode_rup_pengganti=? WHERE kode_rup=?", (b["kode_rup"], h["kode_rup"]))
+        pasangan += 1
+    return pasangan
+
+
 def finalisasi(conn, run_id, paket, id_satker, tahun):
     """Satu transaksi: diff vs data saat ini -> event -> upsert -> tandai hilang. Return ringkasan.
 
@@ -213,7 +273,7 @@ def finalisasi(conn, run_id, paket, id_satker, tahun):
     itu dicatat sebagai satu event REVISI_RUP (menggantikan event BARU + HILANG masing-masing) dan saling ditautkan
     (kode_rup_sebelumnya / kode_rup_pengganti)."""
     now = _now()
-    ringkasan = {"baru": 0, "berubah": 0, "hilang": 0, "muncul_kembali": 0, "revisi": 0, "baseline": False}
+    ringkasan = {"baru": 0, "berubah": 0, "hilang": 0, "muncul_kembali": 0, "revisi": 0, "revisi_lintas": 0, "baseline": False}
     with conn:
         ada_sebelumnya = conn.execute(
             "SELECT 1 FROM scrape_runs WHERE sumber='SIRUP' AND id_satker=? AND tahun=? AND status='success' LIMIT 1",
@@ -295,6 +355,9 @@ def finalisasi(conn, run_id, paket, id_satker, tahun):
             conn.execute("UPDATE sirup_paket SET is_active=0, last_run_id=? WHERE kode_rup=?", (run_id, k))
         for kb, kh in pasangan.items():
             conn.execute("UPDATE sirup_paket SET kode_rup_pengganti=? WHERE kode_rup=?", (kb, kh))
+        if not baseline:
+            ringkasan["revisi_lintas"] = pasangkan_revisi_lintas_run(conn, run_id, id_satker, tahun)
+        simpan_foto(conn, paket, id_satker, tahun)
     return ringkasan
 
 

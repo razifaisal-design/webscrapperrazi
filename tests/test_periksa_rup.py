@@ -132,6 +132,34 @@ class TestBandingLuarDaftar(unittest.TestCase):
         h = banding.hitung(self.c, "p", "nontender", [2026], {SATKER: [1]}, sekarang="2026-06-01T00:00")
         self.assertEqual({b["kode_rup"]: b["status"] for b in h["baris"] if b["kode_rup"] == "N"}, {"N": "Belum ada di SPSE"})   # RUP 'N' tidak lagi salah dipasangkan
 
+    def test_paket_dengan_dua_rup_satu_di_daftar_satu_di_luar_dijumlahkan(self):
+        self.c.execute("INSERT INTO sirup_paket(kode_rup,tahun,id_satker,jenis,nama_paket,pagu,metode_pemilihan,is_active,link) VALUES('A',2026,1,'penyedia','Paket Gabungan',100000000,'Pengadaan Langsung',1,'l')")
+        self.c.execute("INSERT INTO spse_paket(lpse,jenis,kode_paket,tahun,nama_paket,tahapan,is_active,link) VALUES('p','nontender','9001',2026,'Paket Gabungan','Selesai',1,'l')")
+        self.c.execute("INSERT INTO spse_detail(lpse,jenis,kode_paket,kode_rup,rup_json,satker,pagu,hps,lengkap) VALUES('p','nontender','9001','A, B',?,?,200000000,199000000,1)",
+                       (json.dumps([{"kode_rup": "A", "nama_paket": "x", "sumber_dana": "APBD"}, {"kode_rup": "B", "nama_paket": "x", "sumber_dana": "APBD"}]), SATKER))
+        self.c.execute("INSERT INTO spse_jadwal(lpse,jenis,kode_paket,no,tahap,mulai,sampai,jumlah_perubahan,riwayat_json) VALUES('p','nontender','9001',1,'Upload Dokumen Penawaran','2026-03-01T08:00','2026-03-05T08:00',0,'[]')")
+        b = self.hitung()["9001"]
+        self.assertEqual((b["pagu_sama"], b["jumlah_rup_gabungan"]), (False, 1))              # RUP 'B' belum dicek: hanya 100 jt dari 200 jt yang terhitung
+        self.luar("B", 1, pagu=100000000)
+        b = self.hitung()["9001"]
+        self.assertEqual((b["pagu_sama"], b["jumlah_rup_gabungan"], b["pagu_sirup_gabungan"]), (True, 2, 200000000))
+
+    def test_kode_yang_dibuka_hanya_untuk_satker_yang_punya_data_sirup(self):
+        from unittest import mock
+        from scraper import konfig
+        self.spse("321")                                                    # paket satker ber-SiRUP; RUP '321' tidak ada di daftar
+        self.c.execute("INSERT INTO spse_paket(lpse,jenis,kode_paket,tahun,nama_paket,tahapan,is_active,link) VALUES('pontianak','nontender','9999',2026,'Paket Lain','x',1,'l')")
+        self.c.execute("INSERT INTO spse_detail(lpse,jenis,kode_paket,kode_rup,rup_json,satker,pagu,hps,lengkap) VALUES('pontianak','nontender','9999','7','[]','DINAS LAIN',1,1,1)")
+        self.c.execute("UPDATE spse_paket SET lpse='pontianak'"); self.c.execute("UPDATE spse_detail SET lpse='pontianak'"); self.c.execute("UPDATE spse_jadwal SET lpse='pontianak'")
+        self.c.execute("INSERT INTO spse_detail(lpse,jenis,kode_paket,kode_rup,rup_json,satker,pagu,hps,lengkap) VALUES('pontianak','nontender','9998','99',?,'DINAS LAIN',1,1,1)",
+                       (json.dumps([{"kode_rup": "99", "nama_paket": "x", "sumber_dana": "APBD"}]),))
+        self.c.execute("INSERT INTO spse_paket(lpse,jenis,kode_paket,tahun,nama_paket,tahapan,is_active,link) VALUES('pontianak','nontender','9998',2026,'Paket Lain 2','x',1,'l')")
+        self.c.commit()
+        with mock.patch.object(konfig, "satker_sirup", lambda: {SATKER: [1]}):
+            kode = tugas.kode_rup_tak_berpasangan(self.c, [2026])
+        self.assertIn("321", kode)
+        self.assertNotIn("99", kode)                                        # RUP milik satker tanpa data SiRUP tidak dibuka
+
     def test_pagu_beda_terlihat_pada_rup_di_luar_daftar(self):
         self.luar("64482894", 1, pagu=150000000)
         b = self.hitung()["964482894"]

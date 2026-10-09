@@ -4,10 +4,33 @@
   const BASE = location.href.replace(/[?#].*$/, "").replace(/[^/]*$/, "");
   const asli = window.fetch.bind(window);
   const cache = {};
-  const muat = (nama) => cache[nama] || (cache[nama] = asli(BASE + "data/" + nama).then((r) => {
-    if (!r.ok) { delete cache[nama]; throw new Error("tidak ada di salinan publik: " + nama); }
-    return r.json();
-  }));
+  // Sumber data: Supabase (window.PANTAU_SUPABASE diisi saat terbit) atau berkas lokal data/ (ekspor statis biasa)
+  const SB = window.PANTAU_SUPABASE || null;
+  const sbPermintaan = (nama, kolom, terima) => asli(`${SB.url}/rest/v1/publik_berkas?nama=eq.${encodeURIComponent(nama)}&select=${kolom}`,
+    { headers: { apikey: SB.kunci, Accept: terima } });
+  const ambil = (nama) => SB
+    ? sbPermintaan(nama, "isi", "application/vnd.pgrst.object+json").then(async (r) => {
+        if (!r.ok) throw new Error("tidak ada di salinan publik: " + nama);
+        return (await r.json()).isi;
+      })
+    : asli(BASE + "data/" + nama).then((r) => {
+        if (!r.ok) throw new Error("tidak ada di salinan publik: " + nama);
+        return r.json();
+      });
+  const muat = (nama) => cache[nama] || (cache[nama] = ambil(nama).catch((e) => { delete cache[nama]; throw e; }));
+  async function unduhBerkas(nama) {
+    if (!SB) { location.href = BASE + "data/" + nama; return; }
+    let j;
+    try { j = await muat(nama); } catch (e) { alert("Berkas belum tersedia: " + nama); return; }
+    const bin = atob(j.base64), byte = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) byte[i] = bin.charCodeAt(i);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([byte], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    a.download = nama;
+    document.body.appendChild(a); a.click(); a.remove();
+    delete cache[nama];                                       // jangan simpan berkas besar di memori
+  }
+
   const jawab = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { "Content-Type": "application/json" } });
   const norm = (s) => String(s || "").toUpperCase().split(/\s+/).filter(Boolean).join(" ");
 
@@ -93,7 +116,7 @@
     const bawaan = (meta.target.find((t) => t.bawaan) || meta.target[0]).target, th = q.get("tahun") || meta.bawaan.spse;
     const berkas = u.pathname === "/api/spse/excel" ? `spse_${th}.xlsx` : u.pathname === "/api/banding/excel" ? `banding_${th}.xlsx`
       : u.pathname === "/api/excel" ? `excel_${q.get("target") || bawaan}_${q.get("tahun") || meta.bawaan[q.get("target") || bawaan]}.xlsx` : null;
-    if (berkas) location.href = BASE + "data/" + berkas;
+    if (berkas) unduhBerkas(berkas);
   }, true);
 
   document.addEventListener("DOMContentLoaded", async () => {

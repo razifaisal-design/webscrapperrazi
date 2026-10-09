@@ -2,6 +2,7 @@
 
 Tidak ada server dan tidak ada tombol pengambilan data: halaman yang sama dengan dashboard lokal dibaca dari berkas JSON hasil ekspor
 (`statis.js` menggantikan pemanggilan /api/... dengan berkas). Isinya hanya data yang memang publik (SiRUP & SPSE), tanpa data pribadi."""
+import base64
 import datetime
 import hashlib
 import http.client
@@ -138,3 +139,62 @@ def ekspor(db_path, keluar, log=print, dengan_excel=True):
     (keluar / ".nojekyll").write_text("", encoding="utf-8")
     ringkasan["ukuran_mb"] = round(sum(f.stat().st_size for f in keluar.rglob("*") if f.is_file()) / 1e6, 1)
     return ringkasan
+
+
+# ---------------------------------------------------------------- terbitkan: data ke Supabase, halaman statis kecil ke folder publik/
+def muat_konfig_publik(path=None):
+    """config/publik.json -> {supabase_url, kunci_publikasi} atau None bila tidak ada/tidak lengkap."""
+    path = Path(path) if path else AKAR.parent / "config" / "publik.json"
+    if not path.exists():
+        return None
+    d = json.loads(path.read_text(encoding="utf-8"))
+    return d if d.get("supabase_url") and d.get("kunci_publikasi") else None
+
+
+def unggah_berkas(pg, folder_data, log=print):
+    """Ganti isi tabel publik_berkas dengan berkas di folder_data (json -> jsonb; xlsx -> jsonb {"base64": ...}), dalam SATU transaksi: pembaca web publik
+    melihat data lama sampai semuanya selesai, tidak pernah setengah baru. Berkas yang tidak ada lagi dihapus. -> jumlah berkas."""
+    folder_data = Path(folder_data)
+    berkas = sorted(p for p in folder_data.iterdir() if p.suffix in (".json", ".xlsx"))
+    with pg:
+        with pg.cursor() as cur:
+            for p in berkas:
+                isi = p.read_bytes()
+                if p.suffix == ".json":
+                    tipe, teks = "json", isi.decode("utf-8").replace("\x00", "")
+                else:                                      # xlsx: PostgREST tidak menyajikan bytea sebagai berkas, jadi disimpan sebagai base64 dalam jsonb
+                    tipe, teks = "xlsx", json.dumps({"base64": base64.b64encode(isi).decode("ascii")})
+                cur.execute("INSERT INTO public.publik_berkas (nama, tipe, isi, ukuran, diperbarui) VALUES (%s, %s, %s::jsonb, %s, now()) "
+                            "ON CONFLICT (nama) DO UPDATE SET tipe=EXCLUDED.tipe, isi=EXCLUDED.isi, ukuran=EXCLUDED.ukuran, diperbarui=now()",
+                            (p.name, tipe, teks, len(isi)))
+            cur.execute("DELETE FROM public.publik_berkas WHERE nama <> ALL(%s)", ([p.name for p in berkas],))
+            log(f"  {len(berkas)} berkas diterbitkan ke Supabase")
+    return len(berkas)
+
+
+def terbitkan(db_path, keluar, url_db, konfig_publik, log=print, dengan_excel=True, connect=None):
+    """1) bangun ekspor lengkap di folder sementara; 2) terbitkan semua berkas data ke Supabase (dibaca langsung oleh web publik);
+    3) tulis HALAMAN saja ke `keluar` (beberapa KB, tidak ada data) dengan alamat Supabase + kunci publishable tertanam.
+    Urutan itu disengaja: bila penerbitan data gagal, folder `keluar` yang lama tidak diubah."""
+    import tempfile
+    if connect is None:
+        import psycopg
+        connect = psycopg.connect
+    with tempfile.TemporaryDirectory() as tmp:
+        sementara = Path(tmp) / "ekspor"
+        r = ekspor(db_path, sementara, log=log, dengan_excel=dengan_excel)
+        pg = connect(url_db, connect_timeout=30)
+        try:
+            n = unggah_berkas(pg, sementara / "data", log=log)
+        finally:
+            pg.close()
+        keluar = Path(keluar)
+        if keluar.exists():
+            shutil.rmtree(keluar)
+        shutil.copytree(sementara, keluar, ignore=shutil.ignore_patterns("data"))
+        inline = "<script>window.PANTAU_SUPABASE=" + json.dumps({"url": konfig_publik["supabase_url"], "kunci": konfig_publik["kunci_publikasi"]}) + ";</script>\n"
+        for nama in HALAMAN.values():
+            h = (keluar / nama).read_text(encoding="utf-8")
+            (keluar / nama).write_text(h.replace('<script src="statis.js"></script>', inline + '<script src="statis.js"></script>', 1), encoding="utf-8")
+    ukuran = round(sum(f.stat().st_size for f in keluar.rglob("*") if f.is_file()) / 1e6, 3)
+    return {"berkas": n, "ukuran_mb": ukuran, "ekspor": r}

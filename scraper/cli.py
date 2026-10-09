@@ -76,12 +76,53 @@ def cmd_perbarui(args):
     try:
         return tugas.run_perbarui(conn, args.db, tahun=args.tahun, koneksi=args.koneksi, jeda=args.jeda, usia_hari=args.usia_hari,
                                   rinci=args.rinci, satker=args.satker, periksa=not args.tanpa_periksa, ekspor=not args.tanpa_ekspor,
-                                  keluar=args.keluar, unggah=args.unggah)
+                                  keluar=args.keluar, unggah=args.unggah,
+                                  sinkron=False if args.tanpa_sinkron else None)
     except KeyboardInterrupt:
         print("\nDihentikan. Yang sudah terambil tetap tersimpan; jalankan lagi untuk melanjutkan.")
         return 130
     except ValueError as e:
         raise SystemExit(f"Parameter tidak valid: {e}")
+
+
+def cmd_sinkron(args):
+    from . import sinkron
+    try:
+        jumlah = sinkron.sinkron(args.db)
+    except sinkron.SinkronError as e:
+        print(f"TIDAK TERCADANG: {e}")
+        return 1
+    print(f"Supabase dicerminkan: {sum(jumlah.values())} baris di {len(jumlah)} tabel.")
+    return 0
+
+
+def cmd_terbitkan(args):
+    from . import ekspor_publik, sinkron
+    kfg, url = ekspor_publik.muat_konfig_publik(), sinkron.url_db()
+    if not kfg:
+        print("config/publik.json belum lengkap (supabase_url dan kunci_publikasi).")
+        return 1
+    if not url:
+        print("SUPABASE_DB_URL belum diisi di .env (lihat .env.example).")
+        return 1
+    try:
+        r = ekspor_publik.terbitkan(args.db, args.keluar or str(ROOT / "publik"), url, kfg, dengan_excel=not args.tanpa_excel)
+    except Exception as e:
+        print(f"GAGAL menerbitkan: {type(e).__name__}: {str(e)[:300]}")
+        return 1
+    print(f"Terbit: {r['berkas']} berkas data di Supabase; halaman publik {r['ukuran_mb']} MB di {args.keluar or ROOT / 'publik'}")
+    return 0
+
+
+def cmd_tarik(args):
+    from . import sinkron
+    try:
+        jumlah = sinkron.tarik(args.db, paksa=args.paksa)
+    except sinkron.SinkronError as e:
+        print(f"TIDAK DITARIK: {e}")
+        return 1
+    print(f"Database lokal dibangun dari Supabase: {sum(jumlah.values())} baris di {len(jumlah)} tabel.")
+    return 0
 
 
 def cmd_unggah(args):
@@ -197,6 +238,15 @@ def main(argv=None):
     ep.add_argument("--keluar", default=str(ROOT / "publik"), help="folder hasil (default: publik/)")
     ep.add_argument("--tanpa-excel", action="store_true", help="lewati pembuatan berkas Excel (lebih cepat dan kecil)")
     ep.set_defaults(fn=cmd_ekspor_publik)
+    sk = sub.add_parser("sinkron", help="cerminkan database lokal ke Supabase (cadangan); butuh SUPABASE_DB_URL di .env")
+    sk.set_defaults(fn=cmd_sinkron)
+    tk = sub.add_parser("tarik", help="bangun database lokal dari cermin di Supabase (untuk server/GitHub Actions atau komputer baru)")
+    tk.add_argument("--paksa", action="store_true", help="ganti database lokal yang sudah ada (yang lama disimpan sebagai .sebelum-tarik)")
+    tk.set_defaults(fn=cmd_tarik)
+    tb = sub.add_parser("terbitkan", help="terbitkan data ke Supabase (dibaca langsung oleh web publik) dan buat halaman publik kecil di publik/")
+    tb.add_argument("--keluar", help="folder halaman publik (default: publik/)")
+    tb.add_argument("--tanpa-excel", action="store_true")
+    tb.set_defaults(fn=cmd_terbitkan)
     ug = sub.add_parser("unggah", help="unggah folder publik/ (salinan publik) ke Cloudflare dengan Wrangler")
     ug.set_defaults(fn=cmd_unggah)
     pb = sub.add_parser("perbarui", help="SATU PERINTAH: ambil data SiRUP + SPSE, periksa RUP, lalu ekspor salinan publik")
@@ -209,6 +259,7 @@ def main(argv=None):
     pb.add_argument("--tanpa-periksa", action="store_true", help="lewati pemeriksaan RUP langsung ke SiRUP")
     pb.add_argument("--tanpa-ekspor", action="store_true", help="lewati ekspor salinan publik")
     pb.add_argument("--keluar", help="folder salinan publik (default: publik/)")
+    pb.add_argument("--tanpa-sinkron", action="store_true", help="lewati cadangan ke Supabase (otomatis jalan bila SUPABASE_DB_URL ada di .env)")
     pb.add_argument("--unggah", action="store_true", help="setelah ekspor, unggah ke Cloudflare dengan Wrangler")
     pb.set_defaults(fn=cmd_perbarui)
     a = sub.add_parser("ambil", help="SATU PROSES: ambil daftar RUP, lalu detail paket, lalu bangun database Jalan/Gang")

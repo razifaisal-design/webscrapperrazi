@@ -72,11 +72,11 @@ def _paket_spse(conn, lpse, jenis, tahun):
     return hasil
 
 
-def _baris_spse(conn, lpse, jenis, p, cara, sekarang, kode_grup=(), aktif=None, jumlah_paket=1):
+def _baris_spse(conn, lpse, jenis, p, cara, sekarang, kode_grup=(), aktif=None, jumlah_paket=1, pagu_ekstra=0, n_ekstra=0):
     """Bagian baris perbandingan yang berasal dari sisi SPSE (jadwal, pagu, HPS, penawaran, negosiasi, kontrak, pemenang)."""
     jad = _jadwal_paket(conn, lpse, jenis, p["kode_paket"])
     status, acuan = _tayang(jad, sekarang)
-    pagu_ref = sum((aktif[k]["pagu"] or 0) for k in kode_grup) if kode_grup else None
+    pagu_ref = (sum((aktif[k]["pagu"] or 0) for k in kode_grup) + pagu_ekstra) if (kode_grup or n_ekstra) else None
     awal = awal_sampai = None
     if acuan:
         # jadwal ORIGINAL = yang tertua di riwayat perubahan tahap itu (bila pernah diubah)
@@ -92,7 +92,7 @@ def _baris_spse(conn, lpse, jenis, p, cara, sekarang, kode_grup=(), aktif=None, 
         "kontrak_terisi": p["kontrak_terisi"], "lengkap": p["lengkap"],
         "upload_mulai": acuan["mulai"] if acuan else None, "upload_sampai": acuan["sampai"] if acuan else None,
         "upload_mulai_awal": awal, "upload_sampai_awal": awal_sampai, "jadwal_diubah": sum(t["jumlah_perubahan"] for t in jad), "jadwal": jad,
-        "jumlah_rup_gabungan": len(kode_grup), "pagu_sirup_gabungan": pagu_ref,
+        "jumlah_rup_gabungan": len(kode_grup) + n_ekstra, "pagu_sirup_gabungan": pagu_ref,
         "pagu_sama": (None if p["pagu"] is None or pagu_ref is None else abs(pagu_ref - p["pagu"]) < 1),
         "selisih_pagu": (None if p["pagu"] is None or pagu_ref is None else p["pagu"] - pagu_ref),
         "jumlah_paket_spse": jumlah_paket,
@@ -157,9 +157,17 @@ def _bandingkan(conn, lpse, jenis, tahun, ids, milik, tanpa_detail, sekarang, na
         for p, _ in lst:
             pagu_grup.setdefault(p["kode_paket"], []).append(kode)
 
+    def ekstra(p):
+        """RUP lain di paket SPSE yang sama yang tidak tampil di daftar tetapi terbukti ada di SiRUP (dicek lewat kode): ikut dijumlahkan."""
+        kode = {r["kode_rup"] for r in p["rup"]}
+        rec = [luar[k] for k in sorted(kode) if k not in semua and k in luar and luar[k]["ditemukan"]
+               and norm_satker(luar[k]["satker_nama"]) == norm_satker(nama_satker)]
+        return sum(r["pagu"] or 0 for r in rec), len(rec)
+
     def bentuk(p, cara, r):
+        pe, ne = ekstra(p)
         return _baris_spse(conn, lpse, jenis, p, cara, sekarang, pagu_grup.get(p["kode_paket"], []), aktif,
-                           len(klaim.get(r["kode_rup"], [])) if r else 1)
+                           len(klaim.get(r["kode_rup"], [])) if r else 1, pe, ne)
 
     for kode, r in aktif.items():
         dasar = {"tahun": tahun, "kode_rup": kode, "nama_sirup": r["nama_paket"], "pagu_sirup": r["pagu"], "metode_sirup": r["metode_pemilihan"],

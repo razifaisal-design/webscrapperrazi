@@ -76,3 +76,11 @@ Sumber: `https://spse.inaproc.id/pontianak/nontender`. Yang sudah dikerjakan: **
 - Satker baru memakai **rekap umum** (per MAK, per uraian, database paket, perubahan). Aturan Jalan/Saluran/MAK Perbaikan/pemeriksaan wilayah khusus Perkim tidak diterapkan; tab itu otomatis tersembunyi. Aturan khusus bisa ditambahkan per satker di `config/targets.json`.
 - Satker kembar nama dalam satu tahun (mis. DINAS KESEHATAN 2021: dua idSatker) → dipakai yang paketnya terbanyak; satker lainnya dicatat di log.
 - Belum dikerjakan: rekap gabungan beberapa satker sekaligus ("Semua satker") di halaman SiRUP; filter satker di halaman Grafik hanya mengikuti satker yang dipilih.
+
+## Supabase: cadangan, web publik live, foto harian (9 Oktober 2026)
+- **Cadangan** (`python -m scraper sinkron`): database lokal dicerminkan ke Supabase (TRUNCATE + COPY dalam satu transaksi; gagal = tidak berubah). Tabel cermin tertutup untuk publik (RLS tanpa kebijakan, hak anon dicabut). Kredensial: `SUPABASE_DB_URL` di `.env`. Otomatis hanya untuk database utama proyek (database uji tidak boleh menimpa cermin).
+- **Web publik membaca langsung dari Supabase** (`python -m scraper terbitkan`): berkas ekspor (JSON jadi jsonb, Excel jadi base64 dalam jsonb) masuk tabel `publik_berkas` yang SATU-SATUNYA tabel yang boleh dibaca anon (hanya SELECT). Halaman statis (±0,2 MB) membaca lewat REST dengan kunci publishable di `config/publik.json`. Data diperbarui tanpa unggah ulang halaman; halaman hanya perlu diunggah ke Cloudflare bila kode halaman berubah.
+- Konsekuensi: kuota transfer Supabase (gratis ±5 GB/bulan) terpakai tiap pengunjung (rekap "semua tahun" ±beberapa MB terkompresi).
+- **Foto harian** (`sirup_foto`): tiap pengambilan daftar RUP menyimpan daftar RUP aktif hari itu (satu foto per hari per satker & tahun).
+- **Revisi RUP terpotong antar pengambilan** kini dipasangkan: RUP lama hilang di pengambilan N, RUP baru bernama sama muncul dalam 14 hari berikutnya, dengan syarat nama sama DAN (pagu selisih ≤ 10% ATAU 12 segmen MAK sama). Event BARU/HILANG diganti satu REVISI_RUP.
+- Belum: pengambilan terjadwal otomatis (launchd). Foto dan pasangan revisi hanya selengkap seberapa sering pengambilan dijalankan.
